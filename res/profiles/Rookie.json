@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "display_name": "Rookie",
+  "service_tag": "NOOB",
+  "rank_xp": 0,
+  "controller_preset": 0,
+  "team_preference": 0,
+  "emblem": {
+    "foreground": 12,
+    "background": 5,
+    "flags": 0,
+    "primary_color": 8,
+    "secondary_color": 15,
+    "background_color": 2
+  },
+  "user_profile": {
+    "FOVSetting": 78,
+    "VehicleFOVSetting": 70,
+    "PlayerModelPrimaryColorIndex": 8,
+    "PlayerModelSecondaryColorIndex": 15,
+    "PlayerModelTertiaryColorIndex": 2,
+    "PlayerModelPrimaryColor": 8,
+    "PlayerModelSecondaryColor": 15,
+    "PlayerModelTertiaryColor": 2,
+    "HelmetIndex": 0,
+    "LeftShoulderIndex": 0,
+    "RightShoulderIndex": 0,
+    "ChestIndex": 0,
+    "VisorColorIndex": 3,
+    "UseEliteModel": false,
+    "LookControlsInverted": false,
+    "VibrationDisabled": false,
+    "VerticalLookSensitivity": false,
+    "HorizontalLookSensitivity": false,
+    "MasterVolume": 0.7,
+    "MusicVolume": 0.8,
+    "SfxVolume": 0.8,
+    "ServiceTag": "NOOB"
+  },
+  "gamepad_mapping": {
+    "actions": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]
+  }
+}

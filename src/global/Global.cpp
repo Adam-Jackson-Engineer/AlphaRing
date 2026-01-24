@@ -11,4 +11,6 @@ namespace AlphaRing::Global {
     namespace MCC {
         ImplGlobal(Splitscreen);
     }
+
+    ImplGlobal(InstanceConfig);
 }

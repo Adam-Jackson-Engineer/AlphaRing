@@ -1,0 +1,33 @@
+{
+  "version": 1,
+
+  "instance": {
+    "id": "inst_0",
+    "launched_at": "2026-01-23T19:00:00Z"
+  },
+
+  "player": {
+    "profile_name": "Spartan_Blue.json",
+    "controller_guid": "{TEST-GUID-0000-0000-000000000001}",
+    "controller_index": 0,
+    "display_name": "TestPlayer",
+    "is_primary": true
+  },
+
+  "screen": {
+    "position": "top-left",
+    "monitor_index": 0,
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 960,
+      "height": 540
+    }
+  },
+
+  "session": {
+    "session_id": "test_session_001",
+    "total_players": 4,
+    "player_index": 0
+  }
+}

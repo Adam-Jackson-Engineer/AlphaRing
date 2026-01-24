@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "display_name": "Spartan Red",
+  "service_tag": "RED1",
+  "rank_xp": 5200,
+  "controller_preset": 0,
+  "team_preference": 0,
+  "emblem": {
+    "foreground": 45,
+    "background": 12,
+    "flags": 1,
+    "primary_color": 0,
+    "secondary_color": 28,
+    "background_color": 4
+  },
+  "user_profile": {
+    "FOVSetting": 90,
+    "VehicleFOVSetting": 78,
+    "PlayerModelPrimaryColorIndex": 0,
+    "PlayerModelSecondaryColorIndex": 28,
+    "PlayerModelTertiaryColorIndex": 4,
+    "PlayerModelPrimaryColor": 0,
+    "PlayerModelSecondaryColor": 28,
+    "PlayerModelTertiaryColor": 4,
+    "HelmetIndex": 5,
+    "LeftShoulderIndex": 3,
+    "RightShoulderIndex": 3,
+    "ChestIndex": 2,
+    "VisorColorIndex": 1,
+    "UseEliteModel": false,
+    "LookControlsInverted": false,
+    "VibrationDisabled": false,
+    "VerticalLookSensitivity": true,
+    "HorizontalLookSensitivity": true,
+    "MasterVolume": 0.8,
+    "MusicVolume": 0.6,
+    "SfxVolume": 1.0,
+    "ServiceTag": "RED1"
+  },
+  "gamepad_mapping": {
+    "actions": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]
+  }
+}

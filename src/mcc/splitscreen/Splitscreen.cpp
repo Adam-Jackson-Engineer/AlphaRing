@@ -1,4 +1,5 @@
 #include "Splitscreen.h"
+#include "ProfileManager.h"
 
 #include "common.h"
 
@@ -7,6 +8,7 @@
 #include <offset_mcc.h>
 
 #include "../CGameManager.h"
+#include "../InstanceConfig.h"
 
 namespace MCC::Splitscreen {
     DefDetourFunction(__int64, __fastcall, get_index_by_xuid, void* a1, __int64 xuid) {
@@ -29,6 +31,32 @@ namespace MCC::Splitscreen {
         });
 
         assertm(result, "MCC:Splitscreen: failed to hook");
+
+        // Load instance config from Nucleus (if present)
+        AlphaRing::Config::LoadInstanceConfig();
+
+        // Load persistent profiles from disk
+        ProfileManager::LoadAllProfiles();
+
+        // Auto-load profile if specified in instance config
+        if (AlphaRing::Config::ShouldAutoLoadProfile()) {
+            const auto& profile_name = AlphaRing::Config::GetAutoLoadProfileName();
+            bool found = false;
+
+            for (int i = 0; i < (int)ProfileManager::profiles.size(); i++) {
+                if (ProfileManager::profiles[i].filename == profile_name) {
+                    ProfileManager::selected_profile_index[0] = i;
+                    ProfileManager::ApplyToSlot(0, ProfileManager::profiles[i]);
+                    LOG_INFO("Auto-loaded profile '{}' from instance config", profile_name);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                LOG_WARNING("Instance config specified profile '{}' but it was not found", profile_name);
+            }
+        }
 
         return true;
     }
@@ -63,6 +91,15 @@ namespace MCC::Splitscreen {
         auto p_profile = CGameManager::get_profile(index);
         const char* items[] = {"Controller 1", "Controller 2", "Controller 3", "Controller 4", "NONE"};
 
+        // Persistent profile selector
+        if (ImGui::CollapsingHeader("Persistent Profiles", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Indent();
+            ProfileManager::ImGuiProfileSelector(index);
+            ImGui::Unindent();
+        }
+
+        ImGui::Separator();
+
         ImGui::PushItemWidth(200);
         String::convert(buffer, p_profile->name, 1024);
         if (ImGui::InputText("Name", buffer, sizeof(buffer)))
@@ -73,7 +110,7 @@ namespace MCC::Splitscreen {
         ImGui::PushItemWidth(200);ImGui::Combo("Input", &p_profile->controller_index, items, IM_ARRAYSIZE(items));ImGui::PopItemWidth();
         ImGui::EndDisabled();
 
-        if (ImGui::Button("Load Profile")) {
+        if (ImGui::Button("Copy from Player 1")) {
             __int64 xuid;
             auto p_mng = GameManager();
             auto p_engine = GameEngine();
@@ -85,7 +122,7 @@ namespace MCC::Splitscreen {
             }
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Use this in game!!!");
+            ImGui::SetTooltip("Copy profile settings from logged-in Player 1 (must be in-game)");
 
         bool is_disabled = (!index && !p_setting->b_override_profile) || (index && p_setting->b_use_player0_profile);
 
@@ -127,6 +164,17 @@ namespace MCC::Splitscreen {
             ImGui::PopItemWidth();
             ImGui::EndMenuBar();
 #pragma endregion
+        }
+
+        // Show instance config info if loaded (from Nucleus)
+        const auto& inst_cfg = AlphaRing::Config::GetInstanceConfig();
+        if (inst_cfg.loaded) {
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f),
+                "LAN Mode: %s | Screen: %s | Session: %s",
+                inst_cfg.display_name.c_str(),
+                inst_cfg.screen_position.c_str(),
+                inst_cfg.session_id.c_str());
+            ImGui::Separator();
         }
 
         if (ImGui::BeginTabBar("Players")) {

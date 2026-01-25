@@ -50,6 +50,21 @@ namespace MCC::Splitscreen {
         void Randomize();
     };
 
+    // Career stats (persisted across sessions)
+    struct CareerStats {
+        int games_played = 0;
+        int wins = 0;
+        int losses = 0;
+        int total_kills = 0;
+        int total_deaths = 0;
+        int total_assists = 0;
+        int total_score = 0;
+
+        float GetKDRatio() const {
+            return total_deaths > 0 ? (float)total_kills / total_deaths : (float)total_kills;
+        }
+    };
+
     struct PersistentProfile {
         std::string filename;           // e.g., "player1.json"
         std::wstring display_name;      // Gamer tag (max 1024 chars)
@@ -61,6 +76,7 @@ namespace MCC::Splitscreen {
         EmblemConfig emblem;            // Player emblem/insignia
         CUserProfile user_profile;      // Full game profile (armor, settings)
         CGamepadMapping gamepad_mapping; // Controller bindings
+        CareerStats career_stats;       // Persistent career statistics
 
         PersistentProfile();
         void RandomizeAppearance();     // Randomize colors, emblem, armor
@@ -69,7 +85,10 @@ namespace MCC::Splitscreen {
     class ProfileManager {
     public:
         static std::vector<PersistentProfile> profiles;
-        static int selected_profile_index[4]; // Selected profile index for each player slot
+        static std::string selected_profile_key[4]; // Selected profile KEY (filename) per slot - stable across Refresh
+        static bool slot_dirty[4];            // Has unsaved changes
+        static int current_preset[4];         // UI state: controller preset per slot
+        static int current_team[4];           // UI state: team preference per slot
 
         static bool LoadAllProfiles();
         static bool SaveProfile(const PersistentProfile& profile, const std::string& filename);
@@ -79,15 +98,54 @@ namespace MCC::Splitscreen {
         static int ComputeRankLevel(int xp);
         static const char* GetRankName(int level);
 
+        // Key-based profile lookup (returns -1 if not found)
+        static int FindProfileIndexByKey(const std::string& key);
+        // Get profile by key (returns nullptr if not found)
+        static PersistentProfile* GetProfileByKey(const std::string& key);
+
+        // Sync UI state arrays from loaded profile (call after Refresh/Load)
+        static void SyncUIStateFromProfile(int slot_index);
+        // Sync all slots after a bulk reload
+        static void SyncAllUIState();
+
         static void ImGuiProfileSelector(int slot_index);
 
         // Auto-load profile from instance config (called after LoadAllProfiles)
         // Only loads once per session, subsequent calls are no-ops
         static void TryAutoLoadFromConfig();
 
+        // Apply pending team preferences when game starts
+        static void ApplyPendingTeams();
+
+        // Manual team apply - force team application for all active slots
+        static void ApplyTeamsNow(const char* reason);
+
+        // Reset team state (call on init/relaunch to prevent stale state)
+        static void ResetTeamState();
+
+        // Dirty tracking for unsaved changes
+        static void MarkDirty(int slot_index);
+        static bool IsSlotDirty(int slot_index);
+        static void RevertSlot(int slot_index);
+        static void ClearDirty(int slot_index);
+
+        // Armor state machine (two-shot delayed application)
+        static void MarkArmorDirty(int slot_index);
+        static void ProcessPendingArmor();  // Call every frame
+        static void ApplyArmorNow(int slot_index, const char* reason);
+        static void ScheduleArmorTwoShot(int slot_index);  // Start two-shot apply for match start
+
+        // Stats and history system
+        static void OnMatchStart();
+        static void OnMatchEnd();
+        static void UpdateLiveStats(int slot_index, int kills, int deaths, int assists, int score);
+        static void WriteMatchHistory();
+        static std::string GetHistoryPath();
+
     private:
         static bool EnsureProfilesDirectory();
         static bool s_auto_load_attempted;
+        static int s_match_start_epoch;
     };
 
     // XP thresholds for ranks

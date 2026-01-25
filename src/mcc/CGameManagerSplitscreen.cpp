@@ -28,9 +28,23 @@ bool CGameManager::get_xbox_user_id(CGameManager *self, __int64 *pId, wchar_t *p
     auto p_setting = AlphaRing::Global::MCC::Splitscreen();
     auto p_profile = get_profile(index);
 
-    if (!p_setting->b_override || !index)
+    // If splitscreen is off, use original for everything
+    if (!p_setting->b_override)
         return ppOriginal.get_xbox_user_id(self, pId, pName, size, index);
 
+    // For Player 0 (index 0):
+    if (!index) {
+        // Always get original result first (for Xbox User ID authentication)
+        bool result = ppOriginal.get_xbox_user_id(self, pId, pName, size, index);
+
+        // If profile override is enabled, override the name with our custom name
+        if (p_setting->b_override_profile && pName && p_profile->name[0]) {
+            String::wstrcpy(pName, p_profile->name, size >> 1);
+        }
+        return result;
+    }
+
+    // For other players (index 1-3):
     if (index >= p_setting->player_count)
         return false;
 

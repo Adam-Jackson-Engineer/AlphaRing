@@ -15,6 +15,22 @@
             wchar_t name[1024];
             CGamepadMapping mapping;
             CUserProfile profile;
+
+            // Pending team application (for applying when game starts)
+            bool team_pending = false;
+            int pending_team = 0;
+
+            // Armor state machine for two-shot delayed apply
+            // States: 0=Idle, 1=Pending (waiting for delay), 2=FirstApply (applied once, waiting), 3=SecondApply (applied twice, done)
+            int armor_state = 0;
+            int armor_state_frames = 0;   // Frames since state change
+            int armor_match_epoch = 0;    // Match epoch when armor was last applied
+
+            // Live game stats (updated during match)
+            int stats_kills = 0;
+            int stats_deaths = 0;
+            int stats_assists = 0;
+            int stats_score = 0;
         };
 
         struct NetworkDataHeader {

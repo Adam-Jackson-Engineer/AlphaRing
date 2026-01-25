@@ -16,6 +16,86 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+// ==============================================================================
+// SectionBar - Full-width expandable section bar UI helper
+// ==============================================================================
+// Draws a full-width colored bar with expand/collapse chevron, consistent with
+// the main expander style but slightly smaller for subsections.
+//
+// Returns true if the section is expanded (caller should render contents).
+// The open_state is persisted via the provided bool pointer.
+// ==============================================================================
+static bool SectionBar(const char* label, bool* open_state, ImU32 bar_color = IM_COL32(46, 89, 148, 255)) {
+    ImGui::PushID(label);
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
+    float avail_width = ImGui::GetContentRegionAvail().x;
+    float bar_height = ImGui::GetTextLineHeight() + 8.0f;  // Slightly smaller than main expanders
+
+    // Draw background bar
+    ImVec2 bar_min = cursor_pos;
+    ImVec2 bar_max = ImVec2(cursor_pos.x + avail_width, cursor_pos.y + bar_height);
+
+    // Hover detection
+    ImGui::InvisibleButton("##section_bar", ImVec2(avail_width, bar_height));
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+
+    // Darken/lighten on hover
+    ImU32 bg_color = bar_color;
+    if (hovered) {
+        // Lighten slightly
+        int r = (bar_color >> 0) & 0xFF;
+        int g = (bar_color >> 8) & 0xFF;
+        int b = (bar_color >> 16) & 0xFF;
+        r = (r + 30 > 255) ? 255 : r + 30;
+        g = (g + 30 > 255) ? 255 : g + 30;
+        b = (b + 30 > 255) ? 255 : b + 30;
+        bg_color = IM_COL32(r, g, b, 255);
+    }
+
+    draw_list->AddRectFilled(bar_min, bar_max, bg_color, 3.0f);
+
+    // Draw chevron (triangle indicator)
+    float chevron_size = 8.0f;
+    float chevron_x = bar_min.x + 8.0f;
+    float chevron_y = bar_min.y + (bar_height - chevron_size) / 2.0f;
+
+    if (*open_state) {
+        // Down chevron (expanded)
+        draw_list->AddTriangleFilled(
+            ImVec2(chevron_x, chevron_y),
+            ImVec2(chevron_x + chevron_size, chevron_y),
+            ImVec2(chevron_x + chevron_size / 2.0f, chevron_y + chevron_size),
+            IM_COL32(255, 255, 255, 220)
+        );
+    } else {
+        // Right chevron (collapsed)
+        draw_list->AddTriangleFilled(
+            ImVec2(chevron_x, chevron_y),
+            ImVec2(chevron_x + chevron_size, chevron_y + chevron_size / 2.0f),
+            ImVec2(chevron_x, chevron_y + chevron_size),
+            IM_COL32(255, 255, 255, 220)
+        );
+    }
+
+    // Draw label text
+    float text_x = bar_min.x + 24.0f;  // After chevron
+    float text_y = bar_min.y + 4.0f;
+    draw_list->AddText(ImVec2(text_x, text_y), IM_COL32(255, 255, 255, 255), label);
+
+    // Toggle on click
+    if (clicked) {
+        *open_state = !(*open_state);
+    }
+
+    ImGui::PopID();
+
+    // Return whether content should be shown
+    return *open_state;
+}
+
 // Random number generator
 static std::mt19937& GetRNG() {
     static std::mt19937 rng(static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -25,8 +105,61 @@ static std::mt19937& GetRNG() {
 namespace MCC::Splitscreen {
 
     std::vector<PersistentProfile> ProfileManager::profiles;
-    int ProfileManager::selected_profile_index[4] = {-1, -1, -1, -1};
+    std::string ProfileManager::selected_profile_key[4] = {"", "", "", ""};  // Key-based selection (stable across Refresh)
+    bool ProfileManager::slot_dirty[4] = {false, false, false, false};
+    int ProfileManager::current_preset[4] = {0, 0, 0, 0};  // UI state: controller preset
+    int ProfileManager::current_team[4] = {0, 0, 0, 0};    // UI state: team preference
     bool ProfileManager::s_auto_load_attempted = false;
+
+    // ==============================================================================
+    // Key-based profile lookup helpers
+    // ==============================================================================
+    int ProfileManager::FindProfileIndexByKey(const std::string& key) {
+        if (key.empty()) return -1;
+        for (int i = 0; i < (int)profiles.size(); i++) {
+            if (profiles[i].filename == key) {
+                return i;
+            }
+        }
+        return -1;  // Not found
+    }
+
+    PersistentProfile* ProfileManager::GetProfileByKey(const std::string& key) {
+        int idx = FindProfileIndexByKey(key);
+        if (idx >= 0 && idx < (int)profiles.size()) {
+            return &profiles[idx];
+        }
+        return nullptr;
+    }
+
+    void ProfileManager::SyncUIStateFromProfile(int slot_index) {
+        if (slot_index < 0 || slot_index >= 4) return;
+
+        auto* prof = GetProfileByKey(selected_profile_key[slot_index]);
+        if (prof) {
+            current_preset[slot_index] = static_cast<int>(prof->controller_preset);
+            current_team[slot_index] = static_cast<int>(prof->team_preference);
+            LOG_INFO("[UI_SYNC] slot={} after sync: preset={} team={} key={}",
+                slot_index,
+                GetPresetName(prof->controller_preset),
+                GetTeamName(prof->team_preference),
+                selected_profile_key[slot_index]);
+        } else if (!selected_profile_key[slot_index].empty()) {
+            // Key was set but profile not found after reload - clear it
+            LOG_WARNING("[UI_SYNC] slot={} key='{}' not found after reload - clearing",
+                slot_index, selected_profile_key[slot_index]);
+            selected_profile_key[slot_index] = "";
+            current_preset[slot_index] = 0;
+            current_team[slot_index] = 0;
+        }
+    }
+
+    void ProfileManager::SyncAllUIState() {
+        LOG_INFO("[UI_SYNC] Syncing all slots after profile reload");
+        for (int i = 0; i < 4; i++) {
+            SyncUIStateFromProfile(i);
+        }
+    }
 
     // Emblem constructor
     EmblemConfig::EmblemConfig()
@@ -193,7 +326,371 @@ namespace MCC::Splitscreen {
         }
 
         p_engine->change_team(xuid, static_cast<int>(team));
-        LOG_INFO("Changed player {} to team {}", slot_index, GetTeamName(team));
+        LOG_INFO("[ROSTER] Changed player {} to team {}", slot_index, GetTeamName(team));
+    }
+
+    void ProfileManager::ApplyPendingTeams() {
+        if (!MCC::IsInGame()) return;
+
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+            auto p_profile = CGameManager::get_profile(i);
+            if (p_profile && p_profile->team_pending) {
+                ChangePlayerTeam(i, static_cast<Team>(p_profile->pending_team));
+                p_profile->team_pending = false;
+                LOG_INFO("[ROSTER] Applied pending team {} to slot {} (reason=auto_match_start)",
+                    GetTeamName(static_cast<Team>(p_profile->pending_team)), i);
+            }
+        }
+    }
+
+    void ProfileManager::ApplyTeamsNow(const char* reason) {
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        LOG_INFO("[ROSTER] ApplyTeamsNow called (reason={})", reason);
+
+        if (!MCC::IsInGame()) {
+            // Schedule for later - set pending flags
+            for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+                auto* prof = GetProfileByKey(selected_profile_key[i]);
+                if (prof) {
+                    auto p_profile = CGameManager::get_profile(i);
+                    if (p_profile) {
+                        p_profile->team_pending = true;
+                        p_profile->pending_team = static_cast<int>(prof->team_preference);
+                        LOG_INFO("[ROSTER]   Slot {}: scheduled team {} (pending)", i,
+                            GetTeamName(static_cast<Team>(p_profile->pending_team)));
+                    }
+                }
+            }
+            return;
+        }
+
+        // Apply immediately
+        for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+            auto* prof = GetProfileByKey(selected_profile_key[i]);
+            if (prof) {
+                Team team = prof->team_preference;
+                ChangePlayerTeam(i, team);
+                LOG_INFO("[ROSTER]   Slot {}: applied team {} immediately", i, GetTeamName(team));
+
+                // Clear pending flag since we applied now
+                auto p_profile = CGameManager::get_profile(i);
+                if (p_profile) {
+                    p_profile->team_pending = false;
+                }
+            }
+        }
+    }
+
+    void ProfileManager::ResetTeamState() {
+        LOG_INFO("[ROSTER] ResetTeamState() - clearing all pending team flags");
+        for (int i = 0; i < 4; i++) {
+            auto p_profile = CGameManager::get_profile(i);
+            if (p_profile) {
+                p_profile->team_pending = false;
+                p_profile->pending_team = 0;
+            }
+        }
+    }
+
+    void ProfileManager::MarkDirty(int slot_index) {
+        if (slot_index >= 0 && slot_index < 4) {
+            slot_dirty[slot_index] = true;
+        }
+    }
+
+    bool ProfileManager::IsSlotDirty(int slot_index) {
+        if (slot_index >= 0 && slot_index < 4) {
+            return slot_dirty[slot_index];
+        }
+        return false;
+    }
+
+    void ProfileManager::ClearDirty(int slot_index) {
+        if (slot_index >= 0 && slot_index < 4) {
+            slot_dirty[slot_index] = false;
+        }
+    }
+
+    void ProfileManager::RevertSlot(int slot_index) {
+        if (slot_index < 0 || slot_index >= 4) return;
+        auto* prof = GetProfileByKey(selected_profile_key[slot_index]);
+        if (!prof) return;
+
+        // Re-apply the saved profile to revert changes
+        ApplyToSlot(slot_index, *prof);
+        slot_dirty[slot_index] = false;
+        LOG_INFO("Reverted slot {} to saved profile '{}'", slot_index, selected_profile_key[slot_index]);
+    }
+
+    // ==============================================================================
+    // Armor State Machine - Two-shot delayed application
+    // ==============================================================================
+    // MCC/Reach armor requires TWO load_setting() calls with a delay to reliably
+    // apply in subsequent matches. State machine:
+    //   0: Idle - no pending armor
+    //   1: Pending - UI change detected, waiting for debounce delay
+    //   2: FirstApply - first load_setting() called, waiting before second shot
+    //   3: SecondApply - second load_setting() called, will transition to Idle
+    //
+    // At match start, armor is ALWAYS scheduled for two-shot apply.
+    // ==============================================================================
+
+    constexpr int ARMOR_DEBOUNCE_FRAMES = 30;   // ~0.5 sec debounce after UI change
+    constexpr int ARMOR_BETWEEN_SHOTS_FRAMES = 60;  // ~1 sec between first and second apply
+
+    void ProfileManager::MarkArmorDirty(int slot_index) {
+        if (slot_index < 0 || slot_index >= 4) return;
+        auto p_slot = CGameManager::get_profile(slot_index);
+        if (!p_slot) return;
+
+        // Only transition to Pending if we're Idle or already Pending
+        // If we're in FirstApply/SecondApply, let that complete first
+        if (p_slot->armor_state == 0 || p_slot->armor_state == 1) {
+            if (p_slot->armor_state != 1) {
+                LOG_INFO("[ARMOR] Slot {} state: Idle -> Pending (UI change)", slot_index);
+            }
+            p_slot->armor_state = 1;  // Pending
+            p_slot->armor_state_frames = 0;  // Reset debounce timer
+        }
+    }
+
+    void ProfileManager::ProcessPendingArmor() {
+        // Called every frame from ImGuiContext
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+
+        for (int i = 0; i < 4; i++) {
+            auto p_slot = CGameManager::get_profile(i);
+            if (!p_slot || p_slot->armor_state == 0) continue;
+
+            p_slot->armor_state_frames++;
+
+            switch (p_slot->armor_state) {
+                case 1:  // Pending - waiting for debounce (or stagger if frames started negative)
+                    // Note: armor_state_frames can be negative for staggered starts
+                    if (p_slot->armor_state_frames >= ARMOR_DEBOUNCE_FRAMES) {
+                        LOG_INFO("[ARMOR] Slot {} state: Pending -> FirstApply (debounce/stagger complete)", i);
+                        ApplyArmorNow(i, "first_shot");
+                        p_slot->armor_state = 2;  // FirstApply
+                        p_slot->armor_state_frames = 0;
+                    }
+                    break;
+
+                case 2:  // FirstApply - waiting before second shot
+                    if (p_slot->armor_state_frames >= ARMOR_BETWEEN_SHOTS_FRAMES) {
+                        LOG_INFO("[ARMOR] Slot {} state: FirstApply -> SecondApply", i);
+                        ApplyArmorNow(i, "second_shot");
+                        p_slot->armor_state = 3;  // SecondApply
+                        p_slot->armor_state_frames = 0;
+                    }
+                    break;
+
+                case 3:  // SecondApply - complete
+                    LOG_INFO("[ARMOR] Slot {} state: SecondApply -> Idle (complete, epoch={})", i, s_match_start_epoch);
+                    p_slot->armor_state = 0;  // Idle
+                    p_slot->armor_state_frames = 0;
+                    p_slot->armor_match_epoch = s_match_start_epoch;
+                    break;
+            }
+        }
+    }
+
+    void ProfileManager::ApplyArmorNow(int slot_index, const char* reason) {
+        if (slot_index < 0 || slot_index >= 4) return;
+        auto p_slot = CGameManager::get_profile(slot_index);
+        if (!p_slot) return;
+
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+
+        // CRITICAL: Ensure BOTH flags are set correctly for per-player armor
+        if (!p_setting->b_override_profile) {
+            p_setting->b_override_profile = true;
+            LOG_INFO("[ARMOR] Auto-enabled 'Override profile' for custom armor");
+        }
+        if (p_setting->b_use_player0_profile && slot_index > 0) {
+            // IMPORTANT: If we're changing armor for slot > 0, we MUST disable this
+            // Otherwise all slots return Player 0's profile!
+            p_setting->b_use_player0_profile = false;
+            LOG_INFO("[ARMOR] Auto-disabled 'Use player1's profile' - each slot needs own armor");
+        }
+
+        LOG_INFO("[ARMOR] ApplyArmorNow slot={} reason={} epoch={}", slot_index, reason, s_match_start_epoch);
+        LOG_INFO("[ARMOR]   helmet={} chest={} lshoulder={} rshoulder={}",
+            p_slot->profile.HelmetIndex,
+            p_slot->profile.ChestIndex,
+            p_slot->profile.LeftShoulderIndex,
+            p_slot->profile.RightShoulderIndex);
+        LOG_INFO("[ARMOR]   arms={} legs={} visor={} primary={} secondary={}",
+            p_slot->profile.ArmsIndex,
+            p_slot->profile.LegsIndex,
+            p_slot->profile.VisorColorIndex,
+            p_slot->profile.PlayerModelPrimaryColorIndex,
+            p_slot->profile.PlayerModelSecondaryColorIndex);
+
+        auto p_engine = GameEngine();
+        if (MCC::IsInGame() && p_engine) {
+            p_engine->load_setting();
+            LOG_INFO("[ARMOR]   load_setting() called - game should refresh appearance");
+        } else {
+            LOG_INFO("[ARMOR]   Not in-game - armor will apply when match starts");
+        }
+    }
+
+    // Schedule two-shot armor apply for a slot (called at match start)
+    // IMPORTANT: Stagger by slot_index to prevent all slots from calling load_setting()
+    // simultaneously, which can cause only one slot's armor to be applied.
+    void ProfileManager::ScheduleArmorTwoShot(int slot_index) {
+        if (slot_index < 0 || slot_index >= 4) return;
+        auto p_slot = CGameManager::get_profile(slot_index);
+        if (!p_slot) return;
+
+        // Stagger by slot index: slot 0 starts immediately, slot 1 after 90 frames, etc.
+        // This ensures load_setting() calls don't overlap and override each other.
+        constexpr int STAGGER_PER_SLOT = 90;  // ~1.5 sec between slots
+
+        int stagger_frames = slot_index * STAGGER_PER_SLOT;
+
+        LOG_INFO("[ARMOR] Slot {} scheduling two-shot apply (match start, stagger={})",
+            slot_index, stagger_frames);
+
+        // Start in Pending state with negative frame count to delay the start
+        p_slot->armor_state = 1;  // Pending (will transition to FirstApply after stagger)
+        p_slot->armor_state_frames = -stagger_frames;  // Negative = still waiting
+    }
+
+    // ==============================================================================
+    // Stats and History System
+    // ==============================================================================
+
+    int ProfileManager::s_match_start_epoch = 0;
+
+    void ProfileManager::OnMatchStart() {
+        s_match_start_epoch++;
+        LOG_INFO("[SESSION] Match started (epoch={})", s_match_start_epoch);
+
+        // Reset live stats for all slots
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+            auto p_slot = CGameManager::get_profile(i);
+            if (p_slot) {
+                p_slot->stats_kills = 0;
+                p_slot->stats_deaths = 0;
+                p_slot->stats_assists = 0;
+                p_slot->stats_score = 0;
+            }
+        }
+    }
+
+    void ProfileManager::OnMatchEnd() {
+        LOG_INFO("[SESSION] Match ended (epoch={})", s_match_start_epoch);
+
+        // Snapshot final stats and update career
+        WriteMatchHistory();
+
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+            auto* profile = GetProfileByKey(selected_profile_key[i]);
+            if (!profile) continue;
+
+            auto p_slot = CGameManager::get_profile(i);
+            if (p_slot) {
+                // Update career stats
+                profile->career_stats.games_played++;
+                profile->career_stats.total_kills += p_slot->stats_kills;
+                profile->career_stats.total_deaths += p_slot->stats_deaths;
+                profile->career_stats.total_assists += p_slot->stats_assists;
+                profile->career_stats.total_score += p_slot->stats_score;
+
+                // Fast leveling: +10 per kill, +5 per assist, -2 per death
+                int xp_gain = (p_slot->stats_kills * 10) + (p_slot->stats_assists * 5) - (p_slot->stats_deaths * 2);
+                if (xp_gain < 5) xp_gain = 5;  // Minimum XP gain per match
+                profile->rank_xp += xp_gain;
+                profile->rank_level = ComputeRankLevel(profile->rank_xp);
+
+                LOG_INFO("[STATS] Slot {} match end: K={} D={} A={} XP+={} (total XP={})",
+                    i, p_slot->stats_kills, p_slot->stats_deaths, p_slot->stats_assists,
+                    xp_gain, profile->rank_xp);
+
+                // Auto-save profile with updated stats
+                SaveProfile(*profile, profile->filename);
+            }
+        }
+    }
+
+    void ProfileManager::UpdateLiveStats(int slot_index, int kills, int deaths, int assists, int score) {
+        if (slot_index < 0 || slot_index >= 4) return;
+        auto p_slot = CGameManager::get_profile(slot_index);
+        if (!p_slot) return;
+
+        // Only log if changed
+        if (p_slot->stats_kills != kills || p_slot->stats_deaths != deaths ||
+            p_slot->stats_assists != assists || p_slot->stats_score != score) {
+            LOG_INFO("[STATS] Slot {} updated: K={} D={} A={} S={}",
+                slot_index, kills, deaths, assists, score);
+        }
+
+        p_slot->stats_kills = kills;
+        p_slot->stats_deaths = deaths;
+        p_slot->stats_assists = assists;
+        p_slot->stats_score = score;
+    }
+
+    std::string ProfileManager::GetHistoryPath() {
+        return GetProfilesPath() + "/../history";
+    }
+
+    void ProfileManager::WriteMatchHistory() {
+        try {
+            // Ensure history directory exists
+            std::string history_dir = GetHistoryPath();
+            if (!fs::exists(history_dir)) {
+                fs::create_directories(history_dir);
+            }
+
+            // Get current date for filename
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm_buf;
+            localtime_s(&tm_buf, &time);
+
+            char date_buf[32];
+            strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", &tm_buf);
+
+            std::string filename = history_dir + "/" + date_buf + ".jsonl";
+
+            // Build match record
+            json match_record;
+            match_record["timestamp"] = time;
+            match_record["epoch"] = s_match_start_epoch;
+
+            json players = json::array();
+            auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+            for (int i = 0; i < p_setting->player_count && i < 4; i++) {
+                auto p_slot = CGameManager::get_profile(i);
+                if (!p_slot) continue;
+
+                json player;
+                char name_buf[256];
+                wcstombs(name_buf, p_slot->name, sizeof(name_buf));
+                player["slot"] = i;
+                player["name"] = name_buf;
+                player["kills"] = p_slot->stats_kills;
+                player["deaths"] = p_slot->stats_deaths;
+                player["assists"] = p_slot->stats_assists;
+                player["score"] = p_slot->stats_score;
+                players.push_back(player);
+            }
+            match_record["players"] = players;
+
+            // Append to JSONL file
+            std::ofstream file(filename, std::ios::app);
+            if (file.is_open()) {
+                file << match_record.dump() << "\n";
+                LOG_INFO("[STATS] Match history written to {}", filename);
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("[STATS] Failed to write match history: {}", e.what());
+        }
     }
 
     void ApplyControllerPreset(CGamepadMapping& mapping, ControllerPreset preset) {
@@ -742,7 +1239,41 @@ namespace MCC::Splitscreen {
     }
 
     std::string ProfileManager::GetProfilesPath() {
-        return "./alpha_ring/profiles";
+        // Use absolute path based on the DLL's location to ensure consistency
+        // DLL is at: ...\Halo The Master Chief Collection\MCC\Binaries\Win64\WTSAPI32.dll
+        // Profiles are at: ...\Halo The Master Chief Collection\alpha_ring\profiles
+        static std::string s_cached_path;
+        if (s_cached_path.empty()) {
+            char module_path[MAX_PATH] = {0};
+            HMODULE hm = NULL;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)&GetProfilesPath, &hm)) {
+                GetModuleFileNameA(hm, module_path, MAX_PATH);
+            }
+
+            std::string module_str = module_path;
+            // Navigate from MCC\Binaries\Win64\ up to GAME ROOT (not MCC subfolder)
+            // Look for \MCC\Binaries\Win64\ to find game root correctly
+            size_t pos = module_str.rfind("\\MCC\\Binaries\\Win64\\");
+            if (pos != std::string::npos) {
+                // We're running as DLL inside MCC - go to game root's alpha_ring
+                s_cached_path = module_str.substr(0, pos) + "\\alpha_ring\\profiles";
+            } else {
+                // Fallback: try old pattern (might be different directory structure)
+                pos = module_str.rfind("\\Binaries\\Win64\\");
+                if (pos != std::string::npos) {
+                    s_cached_path = module_str.substr(0, pos) + "\\alpha_ring\\profiles";
+                } else {
+                    // Last resort: relative path (dev/testing scenario)
+                    s_cached_path = "./alpha_ring/profiles";
+                }
+            }
+
+            LOG_INFO("[PATH] ModuleDir={}", module_path);
+            LOG_INFO("[PATH] ProfilesDir={}", s_cached_path);
+        }
+        return s_cached_path;
     }
 
     bool ProfileManager::EnsureProfilesDirectory() {
@@ -766,6 +1297,7 @@ namespace MCC::Splitscreen {
         }
 
         std::string path = GetProfilesPath();
+        LOG_INFO("[LOAD] ScanningDir={}", path);
 
         try {
             for (const auto& entry : fs::directory_iterator(path)) {
@@ -855,11 +1387,31 @@ namespace MCC::Splitscreen {
                             from_json(j["gamepad_mapping"], profile.gamepad_mapping);
                         }
 
+                        // Load career stats (persistent across sessions)
+                        if (j.contains("career_stats") && j["career_stats"].is_object()) {
+                            auto& cs = j["career_stats"];
+                            if (cs.contains("games_played")) profile.career_stats.games_played = cs["games_played"].get<int>();
+                            if (cs.contains("wins")) profile.career_stats.wins = cs["wins"].get<int>();
+                            if (cs.contains("losses")) profile.career_stats.losses = cs["losses"].get<int>();
+                            if (cs.contains("total_kills")) profile.career_stats.total_kills = cs["total_kills"].get<int>();
+                            if (cs.contains("total_deaths")) profile.career_stats.total_deaths = cs["total_deaths"].get<int>();
+                            if (cs.contains("total_assists")) profile.career_stats.total_assists = cs["total_assists"].get<int>();
+                            if (cs.contains("total_score")) profile.career_stats.total_score = cs["total_score"].get<int>();
+                            LOG_INFO("  Career stats: games={}, K/D={}/{}, K/D ratio={:.2f}",
+                                profile.career_stats.games_played,
+                                profile.career_stats.total_kills,
+                                profile.career_stats.total_deaths,
+                                profile.career_stats.GetKDRatio());
+                        }
+
                         profiles.push_back(profile);
-                        LOG_INFO("Loaded profile: {} (display_name='{}', rank={})",
-                            profile.filename,
-                            wstring_to_utf8(profile.display_name),
-                            profile.rank_level);
+                        LOG_INFO("[LOAD] ProfileName={} version={} Path={}",
+                            profile.filename, version, entry.path().string());
+                        LOG_INFO("[LOAD] Fields: preset={}, team={}, helmet={}, tag={}",
+                            GetPresetName(profile.controller_preset),
+                            GetTeamName(profile.team_preference),
+                            profile.user_profile.HelmetIndex,
+                            wstring_to_utf8(std::wstring(profile.service_tag, 4)));
                     } catch (const json::exception& e) {
                         LOG_ERROR("Failed to parse profile {}: {}", entry.path().string(), e.what());
                     }
@@ -870,7 +1422,12 @@ namespace MCC::Splitscreen {
             return false;
         }
 
-        LOG_INFO("Loaded {} profiles", profiles.size());
+        LOG_INFO("[LOAD] Loaded {} profiles from {}", profiles.size(), path);
+
+        // CRITICAL: Sync UI state for all slots after reload
+        // This fixes the "Refresh changes team but UI doesn't update" bug
+        SyncAllUIState();
+
         return true;
     }
 
@@ -900,6 +1457,17 @@ namespace MCC::Splitscreen {
                 {"background_color", profile.emblem.background_color}
             };
 
+            // Career stats (persistent across sessions)
+            j["career_stats"] = json{
+                {"games_played", profile.career_stats.games_played},
+                {"wins", profile.career_stats.wins},
+                {"losses", profile.career_stats.losses},
+                {"total_kills", profile.career_stats.total_kills},
+                {"total_deaths", profile.career_stats.total_deaths},
+                {"total_assists", profile.career_stats.total_assists},
+                {"total_score", profile.career_stats.total_score}
+            };
+
             json user_profile_json;
             to_json(user_profile_json, profile.user_profile);
             j["user_profile"] = user_profile_json;
@@ -908,16 +1476,18 @@ namespace MCC::Splitscreen {
             to_json(gamepad_json, profile.gamepad_mapping);
             j["gamepad_mapping"] = gamepad_json;
 
+            std::string json_str = j.dump(2);
+
             std::ofstream file(filepath);
             if (!file.is_open()) {
-                LOG_ERROR("Failed to open file for writing: {}", filepath);
+                LOG_ERROR("[SAVE] Failed to open for writing: {}", filepath);
                 return false;
             }
 
-            file << j.dump(2);
+            file << json_str;
             file.close();
 
-            LOG_INFO("Saved profile: {}", filepath);
+            LOG_INFO("[SAVE] AbsolutePath={} bytes={}", filepath, json_str.size());
             return true;
         } catch (const std::exception& e) {
             LOG_ERROR("Failed to save profile: {}", e.what());
@@ -938,10 +1508,11 @@ namespace MCC::Splitscreen {
                     [&filename](const PersistentProfile& p) { return p.filename == filename; });
                 profiles.erase(it, profiles.end());
 
-                // Reset selected indices if they were pointing to this profile
+                // Clear selection for any slots that had this profile selected
                 for (int i = 0; i < 4; i++) {
-                    if (selected_profile_index[i] >= (int)profiles.size()) {
-                        selected_profile_index[i] = -1;
+                    if (selected_profile_key[i] == filename) {
+                        selected_profile_key[i] = "";
+                        LOG_INFO("[DELETE] Cleared selection for slot {} (deleted profile)", i);
                     }
                 }
 
@@ -970,7 +1541,7 @@ namespace MCC::Splitscreen {
             LOG_INFO("Auto-disabled 'Use player1's profile' setting (each player needs own profile)");
         }
 
-        LOG_INFO("Applying profile '{}' to slot {}", wstring_to_utf8(profile.display_name), slot_index);
+        LOG_INFO("[ROSTER] Applying profile '{}' to slot {}", wstring_to_utf8(profile.display_name), slot_index);
 
         // Copy display name
         String::wstrcpy(p_slot->name, profile.display_name.c_str(), 1024);
@@ -985,11 +1556,19 @@ namespace MCC::Splitscreen {
         }
         LOG_INFO("  ServiceTag: {}", wstring_to_utf8(std::wstring(profile.service_tag, 4)));
 
-        LOG_INFO("  Armor: Helmet={}, Chest={}, Colors=({},{},{})",
-            p_slot->profile.HelmetIndex, p_slot->profile.ChestIndex,
-            p_slot->profile.PlayerModelPrimaryColor,
-            p_slot->profile.PlayerModelSecondaryColor,
-            p_slot->profile.PlayerModelTertiaryColor);
+        LOG_INFO("[ARMOR] ApplyToSlot slot={} helmet={} chest={} lshoulder={} rshoulder={} arms={} legs={} visor={}",
+            slot_index,
+            p_slot->profile.HelmetIndex,
+            p_slot->profile.ChestIndex,
+            p_slot->profile.LeftShoulderIndex,
+            p_slot->profile.RightShoulderIndex,
+            p_slot->profile.ArmsIndex,
+            p_slot->profile.LegsIndex,
+            p_slot->profile.VisorColorIndex);
+        LOG_INFO("[ARMOR] Colors: primary={} secondary={} tertiary={}",
+            p_slot->profile.PlayerModelPrimaryColorIndex,
+            p_slot->profile.PlayerModelSecondaryColorIndex,
+            p_slot->profile.PlayerModelTertiaryColorIndex);
 
         // Apply controller preset
         if (profile.controller_preset != ControllerPreset::Custom) {
@@ -1001,15 +1580,31 @@ namespace MCC::Splitscreen {
             LOG_INFO("  Controller: Custom mapping loaded");
         }
 
+        // Log control settings
+        LOG_INFO("  LookControlsInverted={}", p_slot->profile.LookControlsInverted);
+
+        // CRITICAL: Sync UI state arrays with profile values
+        // This ensures the Save button writes correct values
+        current_preset[slot_index] = static_cast<int>(profile.controller_preset);
+        current_team[slot_index] = static_cast<int>(profile.team_preference);
+        LOG_INFO("[UI] Synced UI state for slot {}: preset={} team={}",
+            slot_index, GetPresetName(profile.controller_preset), GetTeamName(profile.team_preference));
+
         // Trigger settings reload if in-game
         auto p_engine = GameEngine();
         if (MCC::IsInGame() && p_engine) {
-            LOG_INFO("  Triggering load_setting()");
+            LOG_INFO("[ARMOR] load_setting() triggered from ApplyToSlot - game should refresh appearance");
             p_engine->load_setting();
 
-            // Apply team preference (for team games)
+            // Apply team preference immediately since we're in-game
             ChangePlayerTeam(slot_index, profile.team_preference);
-            LOG_INFO("  Team preference: {}", GetTeamName(profile.team_preference));
+            p_slot->team_pending = false;
+            LOG_INFO("  Team applied immediately: {}", GetTeamName(profile.team_preference));
+        } else {
+            // Mark team preference as pending for when game starts
+            p_slot->team_pending = true;
+            p_slot->pending_team = static_cast<int>(profile.team_preference);
+            LOG_INFO("  Team preference {} pending (not in-game yet)", GetTeamName(profile.team_preference));
         }
 
         LOG_INFO("Profile applied successfully to slot {}", slot_index);
@@ -1039,19 +1634,20 @@ namespace MCC::Splitscreen {
             return;
         }
 
-        // Find profile by filename
-        for (int i = 0; i < (int)profiles.size(); i++) {
-            if (profiles[i].filename == p_cfg->profile_name) {
-                selected_profile_index[0] = i;
-                ApplyToSlot(0, profiles[i]);
-                LOG_INFO("=== Auto-loaded profile from instance config ===");
-                LOG_INFO("  Profile: {}", p_cfg->profile_name);
-                LOG_INFO("  Display name: {}", p_cfg->display_name);
-                LOG_INFO("  Player: {}/{}", p_cfg->player_index + 1, p_cfg->total_players);
-                LOG_INFO("  Screen position: {}", p_cfg->screen_position);
-                LOG_INFO("================================================");
-                return;
-            }
+        // Find profile by filename (key-based)
+        auto* prof = GetProfileByKey(p_cfg->profile_name);
+        if (prof) {
+            selected_profile_key[0] = p_cfg->profile_name;
+            ApplyToSlot(0, *prof);
+            current_preset[0] = static_cast<int>(prof->controller_preset);
+            current_team[0] = static_cast<int>(prof->team_preference);
+            LOG_INFO("=== Auto-loaded profile from instance config ===");
+            LOG_INFO("  Profile: {}", p_cfg->profile_name);
+            LOG_INFO("  Display name: {}", p_cfg->display_name);
+            LOG_INFO("  Player: {}/{}", p_cfg->player_index + 1, p_cfg->total_players);
+            LOG_INFO("  Screen position: {}", p_cfg->screen_position);
+            LOG_INFO("================================================");
+            return;
         }
 
         LOG_WARNING("Instance config requested profile '{}' but it was not found in profiles/",
@@ -1083,184 +1679,8 @@ namespace MCC::Splitscreen {
         return "Captain";
     }
 
-    void ProfileManager::ImGuiProfileSelector(int slot_index) {
-        static char new_profile_name[256] = "";
-        static bool show_new_profile_popup = false;
-        static int popup_slot = -1;
-        static int current_preset[4] = {0, 0, 0, 0}; // Controller preset for each slot
-        static int current_team[4] = {0, 0, 0, 0};   // Team preference for each slot
-
-        ImGui::PushID(slot_index);
-
-        // Profile dropdown - auto-applies on selection
-        const char* current_profile = (selected_profile_index[slot_index] >= 0 &&
-                                       selected_profile_index[slot_index] < (int)profiles.size())
-            ? profiles[selected_profile_index[slot_index]].filename.c_str()
-            : "-- None --";
-
-        ImGui::PushItemWidth(200);
-        if (ImGui::BeginCombo("Profile", current_profile)) {
-            if (ImGui::Selectable("-- None --", selected_profile_index[slot_index] < 0)) {
-                selected_profile_index[slot_index] = -1;
-            }
-            for (int i = 0; i < (int)profiles.size(); i++) {
-                bool is_selected = (selected_profile_index[slot_index] == i);
-                if (ImGui::Selectable(profiles[i].filename.c_str(), is_selected)) {
-                    if (selected_profile_index[slot_index] != i) {
-                        selected_profile_index[slot_index] = i;
-                        // Auto-apply the profile immediately
-                        ApplyToSlot(slot_index, profiles[i]);
-                        current_preset[slot_index] = static_cast<int>(profiles[i].controller_preset);
-                        current_team[slot_index] = static_cast<int>(profiles[i].team_preference);
-                        LOG_INFO("Auto-applied profile '{}' to slot {}", profiles[i].filename, slot_index);
-                    }
-                }
-                if (is_selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::PopItemWidth();
-
-        ImGui::SameLine();
-
-        // Re-apply button (in case you want to reload current profile)
-        ImGui::BeginDisabled(selected_profile_index[slot_index] < 0);
-        if (ImGui::Button("Re-Apply")) {
-            if (selected_profile_index[slot_index] >= 0 &&
-                selected_profile_index[slot_index] < (int)profiles.size()) {
-                ApplyToSlot(slot_index, profiles[selected_profile_index[slot_index]]);
-                current_preset[slot_index] = static_cast<int>(profiles[selected_profile_index[slot_index]].controller_preset);
-                current_team[slot_index] = static_cast<int>(profiles[selected_profile_index[slot_index]].team_preference);
-            }
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Re-apply the current profile to the game");
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-
-        // Save button - saves current slot settings to selected profile
-        if (ImGui::Button("Save")) {
-            auto p_profile = CGameManager::get_profile(slot_index);
-            if (p_profile) {
-                PersistentProfile new_prof;
-
-                if (selected_profile_index[slot_index] >= 0 &&
-                    selected_profile_index[slot_index] < (int)profiles.size()) {
-                    // Update existing profile
-                    new_prof = profiles[selected_profile_index[slot_index]];
-                } else {
-                    // Create new filename based on slot name
-                    char name_buffer[256];
-                    String::convert(name_buffer, p_profile->name, 256);
-                    new_prof.filename = std::string(name_buffer) + ".json";
-                }
-
-                new_prof.display_name = p_profile->name;
-                memcpy(new_prof.service_tag, p_profile->profile.ServiceTag, 4 * sizeof(wchar_t));
-                new_prof.service_tag[4] = L'\0';
-                new_prof.controller_preset = static_cast<ControllerPreset>(current_preset[slot_index]);
-                new_prof.team_preference = static_cast<Team>(current_team[slot_index]);
-                memcpy(&new_prof.user_profile, &p_profile->profile, sizeof(CUserProfile));
-                memcpy(&new_prof.gamepad_mapping, &p_profile->mapping, sizeof(CGamepadMapping));
-
-                if (SaveProfile(new_prof, new_prof.filename)) {
-                    // Reload profiles to update the list
-                    LoadAllProfiles();
-
-                    // Find and select the saved profile
-                    for (int i = 0; i < (int)profiles.size(); i++) {
-                        if (profiles[i].filename == new_prof.filename) {
-                            selected_profile_index[slot_index] = i;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Save current slot settings (armor, controls, etc.) to profile");
-        }
-
-        ImGui::SameLine();
-
-        // New button
-        if (ImGui::Button("New")) {
-            show_new_profile_popup = true;
-            popup_slot = slot_index;
-            memset(new_profile_name, 0, sizeof(new_profile_name));
-        }
-
-        ImGui::SameLine();
-
-        // Delete button
-        ImGui::BeginDisabled(selected_profile_index[slot_index] < 0);
-        if (ImGui::Button("Delete")) {
-            if (selected_profile_index[slot_index] >= 0 &&
-                selected_profile_index[slot_index] < (int)profiles.size()) {
-                DeleteProfile(profiles[selected_profile_index[slot_index]].filename);
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-
-        // Refresh button
-        if (ImGui::Button("Refresh")) {
-            LoadAllProfiles();
-        }
-
-        // Show rank info if profile is selected
-        if (selected_profile_index[slot_index] >= 0 &&
-            selected_profile_index[slot_index] < (int)profiles.size()) {
-            auto& prof = profiles[selected_profile_index[slot_index]];
-            ImGui::Text("Rank: %s (Level %d) - %d XP", GetRankName(prof.rank_level), prof.rank_level, prof.rank_xp);
-        }
-
-        // Controller preset selector (works on current slot, independent of profiles)
-        ImGui::Separator();
-        ImGui::Text("Controller Preset:");
-        ImGui::SameLine();
-
-        const char* preset_names[] = {
-            "Default", "Bumper Jumper", "Fishstick", "Recon",
-            "Universal Reclaimer", "Universal Zoom & Shoot", "Custom"
-        };
-
-        ImGui::PushItemWidth(180);
-        if (ImGui::Combo("##ControllerPreset", &current_preset[slot_index], preset_names, IM_ARRAYSIZE(preset_names))) {
-            auto p_slot = CGameManager::get_profile(slot_index);
-            if (p_slot) {
-                ControllerPreset preset = static_cast<ControllerPreset>(current_preset[slot_index]);
-                if (preset != ControllerPreset::Custom) {
-                    ApplyControllerPreset(p_slot->mapping, preset);
-                    auto p_engine = GameEngine();
-                    if (MCC::IsInGame() && p_engine) {
-                        p_engine->load_setting();
-                    }
-                    LOG_INFO("Applied controller preset '{}' to slot {}", GetPresetName(preset), slot_index);
-                }
-            }
-        }
-        ImGui::PopItemWidth();
-
-        if (current_preset[slot_index] == static_cast<int>(ControllerPreset::Custom)) {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Edit in Gamepad Mapping below)");
-        }
-
-        // Team selector
-        ImGui::Text("Team Preference:");
-        ImGui::SameLine();
-
-        const char* team_names[] = {
-            "Red", "Blue", "Green", "Orange", "Purple", "Gold", "Brown", "Pink"
-        };
-
-        // Team colors for visual feedback
+    // Helper to draw team color square
+    static void DrawTeamColorSquare(Team team) {
         ImVec4 team_colors[] = {
             ImVec4(1.0f, 0.2f, 0.2f, 1.0f),  // Red
             ImVec4(0.2f, 0.4f, 1.0f, 1.0f),  // Blue
@@ -1271,39 +1691,302 @@ namespace MCC::Splitscreen {
             ImVec4(0.6f, 0.4f, 0.2f, 1.0f),  // Brown
             ImVec4(1.0f, 0.4f, 0.7f, 1.0f)   // Pink
         };
-
-        ImGui::PushItemWidth(120);
-        // Show colored preview of current team
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(team_colors[current_team[slot_index]].x * 0.3f,
-                                                        team_colors[current_team[slot_index]].y * 0.3f,
-                                                        team_colors[current_team[slot_index]].z * 0.3f, 1.0f));
-        if (ImGui::Combo("##TeamPreference", &current_team[slot_index], team_names, IM_ARRAYSIZE(team_names))) {
-            Team team = static_cast<Team>(current_team[slot_index]);
-            // If in-game, immediately change team
-            if (MCC::IsInGame()) {
-                ChangePlayerTeam(slot_index, team);
-            }
-            LOG_INFO("Set team preference for slot {} to {}", slot_index, GetTeamName(team));
+        int idx = static_cast<int>(team);
+        if (idx >= 0 && idx < 8) {
+            ImGui::ColorButton("##teamcolor", team_colors[idx], ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, ImVec2(16, 16));
         }
-        ImGui::PopStyleColor();
+    }
+
+    void ProfileManager::ImGuiProfileSelector(int slot_index) {
+        static char new_profile_name[4][256] = {{0}, {0}, {0}, {0}}; // Per-slot to prevent state bleed
+        static bool show_new_profile_popup = false;
+        static int popup_slot = -1;
+        // NOTE: current_preset and current_team are now class static members,
+        // synced in ApplyToSlot() to ensure save/load consistency
+
+        // P0-3: Track slot changes to force all sections collapsed on switch
+        static int s_last_slot = -1;
+        static bool s_force_collapse = true;  // Start collapsed on first open
+        if (s_last_slot != slot_index) {
+            s_force_collapse = true;
+            s_last_slot = slot_index;
+        }
+
+        auto p_slot = CGameManager::get_profile(slot_index);
+        if (!p_slot) return;
+
+        ImGui::PushID(slot_index);
+
+        // ========== TOP SECTION: Profile dropdown (left) + Input dropdown (right) ==========
+        // Profile dropdown - uses key-based selection (stable across Refresh)
+        const char* current_profile = !selected_profile_key[slot_index].empty()
+            ? selected_profile_key[slot_index].c_str()
+            : "-- None --";
+
+        ImGui::PushItemWidth(180);
+        if (ImGui::BeginCombo("Profile", current_profile)) {
+            if (ImGui::Selectable("-- None --", selected_profile_key[slot_index].empty())) {
+                selected_profile_key[slot_index] = "";
+                ClearDirty(slot_index);
+            }
+            for (int i = 0; i < (int)profiles.size(); i++) {
+                bool is_selected = (selected_profile_key[slot_index] == profiles[i].filename);
+                if (ImGui::Selectable(profiles[i].filename.c_str(), is_selected)) {
+                    if (selected_profile_key[slot_index] != profiles[i].filename) {
+                        selected_profile_key[slot_index] = profiles[i].filename;
+                        ApplyToSlot(slot_index, profiles[i]);
+                        current_preset[slot_index] = static_cast<int>(profiles[i].controller_preset);
+                        current_team[slot_index] = static_cast<int>(profiles[i].team_preference);
+                        ClearDirty(slot_index);
+                        LOG_INFO("[UI] Selected profile '{}' for slot {} (key-based)", profiles[i].filename, slot_index);
+                    }
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
         ImGui::PopItemWidth();
 
-        ImGui::SameLine();
-        if (MCC::IsInGame()) {
-            if (ImGui::Button("Change Now")) {
-                ChangePlayerTeam(slot_index, static_cast<Team>(current_team[slot_index]));
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Change team immediately in the current game");
-            }
-        } else {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Applied when loading profile in-game)");
+        // Dirty indicator
+        if (IsSlotDirty(slot_index)) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "*unsaved");
         }
 
-        // Appearance section (emblem and colors)
-        if (selected_profile_index[slot_index] >= 0 &&
-            selected_profile_index[slot_index] < (int)profiles.size()) {
-            auto& prof = profiles[selected_profile_index[slot_index]];
+        // Input dropdown (stacked below Profile)
+        // NOTE: Controller assignment is per-slot RUNTIME state, NOT saved to profile
+        const char* input_items[] = {"Controller 1", "Controller 2", "Controller 3", "Controller 4", "NONE"};
+        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        ImGui::BeginDisabled(!slot_index && p_setting->b_player0_use_km);
+        ImGui::PushItemWidth(180);
+        ImGui::Combo("Input", &p_slot->controller_index, input_items, IM_ARRAYSIZE(input_items));
+        // Do NOT mark dirty - controller is not part of profile
+        ImGui::PopItemWidth();
+        ImGui::EndDisabled();
+
+        // ========== SAVE / REVERT / NEW PROFILE BUTTONS (always visible, outside expanders) ==========
+        ImGui::Spacing();
+        {
+            bool has_profile_selected = !selected_profile_key[slot_index].empty();
+
+            // Save button
+            ImGui::BeginDisabled(!IsSlotDirty(slot_index) && has_profile_selected);
+            if (ImGui::Button("Save", ImVec2(80, 0))) {
+                PersistentProfile new_prof;
+                std::string old_key = selected_profile_key[slot_index];
+
+                auto* existing = GetProfileByKey(selected_profile_key[slot_index]);
+                if (existing) {
+                    new_prof = *existing;
+                } else {
+                    char fname_buf[256];
+                    String::convert(fname_buf, p_slot->name, 256);
+                    new_prof.filename = std::string(fname_buf) + ".json";
+                }
+
+                // Capture ALL slot state for saving
+                new_prof.display_name = p_slot->name;
+                memcpy(new_prof.service_tag, p_slot->profile.ServiceTag, 4 * sizeof(wchar_t));
+                new_prof.service_tag[4] = L'\0';
+                new_prof.controller_preset = static_cast<ControllerPreset>(current_preset[slot_index]);
+                new_prof.team_preference = static_cast<Team>(current_team[slot_index]);
+                memcpy(&new_prof.user_profile, &p_slot->profile, sizeof(CUserProfile));
+                memcpy(&new_prof.gamepad_mapping, &p_slot->mapping, sizeof(CGamepadMapping));
+
+                LOG_INFO("[SAVE] Slot={} ProfileKey={} Begin", slot_index, new_prof.filename);
+                LOG_INFO("[SAVE] Fields: name={}, tag={}, preset={}, team={}, helmet={}",
+                    wstring_to_utf8(new_prof.display_name),
+                    wstring_to_utf8(std::wstring(new_prof.service_tag, 4)),
+                    GetPresetName(new_prof.controller_preset),
+                    GetTeamName(new_prof.team_preference),
+                    new_prof.user_profile.HelmetIndex);
+
+                if (SaveProfile(new_prof, new_prof.filename)) {
+                    LoadAllProfiles();
+                    // Re-sync UI state after reload
+                    SyncUIStateFromProfile(slot_index);
+                    ClearDirty(slot_index);
+                    LOG_INFO("[SAVE] Success - slot {} using key '{}'", slot_index, new_prof.filename);
+                } else {
+                    LOG_ERROR("[SAVE] FAILED for slot {} profile {}", slot_index, new_prof.filename);
+                }
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Save current settings to profile file");
+            }
+
+            ImGui::SameLine();
+
+            // Revert button
+            ImGui::BeginDisabled(!IsSlotDirty(slot_index) || selected_profile_key[slot_index].empty());
+            if (ImGui::Button("Revert", ImVec2(80, 0))) {
+                RevertSlot(slot_index);
+                SyncUIStateFromProfile(slot_index);
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Revert to last saved profile");
+            }
+
+            ImGui::SameLine();
+
+            // New profile button
+            if (ImGui::Button("New Profile", ImVec2(100, 0))) {
+                show_new_profile_popup = true;
+                popup_slot = slot_index;
+                memset(new_profile_name[slot_index], 0, sizeof(new_profile_name[slot_index]));
+            }
+
+            // Show rank info on same line if profile is selected
+            auto* selected_prof = GetProfileByKey(selected_profile_key[slot_index]);
+            if (selected_prof) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "  Rank: %s (Lv%d)",
+                    GetRankName(selected_prof->rank_level), selected_prof->rank_level);
+            }
+        }
+
+        ImGui::Separator();
+
+        // ========== EXPANDER 1: Profile Settings ==========
+        // P0-3: Force collapsed on slot change or window open
+        if (s_force_collapse) {
+            ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+        }
+        if (ImGui::CollapsingHeader("Profile Settings")) {
+            ImGui::Indent();
+
+            // Display Name
+            char name_buffer[256];
+            String::convert(name_buffer, p_slot->name, 256);
+            ImGui::PushItemWidth(250);
+            if (ImGui::InputText("Display Name", name_buffer, sizeof(name_buffer))) {
+                String::convert(p_slot->name, name_buffer, 1024);
+                MarkDirty(slot_index);
+            }
+            ImGui::PopItemWidth();
+
+            // Service Tag (3-char + 4-char fields)
+            char tag3[4] = {0};
+            char tag4[5] = {0};
+            for (int i = 0; i < 3 && i < 4; i++) {
+                tag3[i] = static_cast<char>(p_slot->profile.ServiceTag[i]);
+            }
+            for (int i = 0; i < 4; i++) {
+                tag4[i] = static_cast<char>(p_slot->profile.ServiceTag[i]);
+            }
+
+            ImGui::Text("Service Tag:");
+            ImGui::SameLine();
+            ImGui::PushItemWidth(50);
+            if (ImGui::InputText("##tag3", tag3, 4, ImGuiInputTextFlags_CharsUppercase)) {
+                for (int i = 0; i < 3; i++) {
+                    p_slot->profile.ServiceTag[i] = static_cast<wchar_t>(tag3[i] ? tag3[i] : L' ');
+                }
+                MarkDirty(slot_index);
+            }
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            ImGui::Text("/");
+            ImGui::SameLine();
+            ImGui::PushItemWidth(60);
+            if (ImGui::InputText("##tag4", tag4, 5, ImGuiInputTextFlags_CharsUppercase)) {
+                for (int i = 0; i < 4; i++) {
+                    p_slot->profile.ServiceTag[i] = static_cast<wchar_t>(tag4[i] ? tag4[i] : L' ');
+                }
+                MarkDirty(slot_index);
+            }
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(3-char or 4-char tag)");
+
+            // Button Layout
+            const char* preset_names[] = {
+                "Default", "Bumper Jumper", "Fishstick", "Recon",
+                "Universal Reclaimer", "Universal Zoom & Shoot", "Custom"
+            };
+            ImGui::PushItemWidth(180);
+            if (ImGui::Combo("Button Layout", &current_preset[slot_index], preset_names, IM_ARRAYSIZE(preset_names))) {
+                ControllerPreset preset = static_cast<ControllerPreset>(current_preset[slot_index]);
+                if (preset != ControllerPreset::Custom) {
+                    ApplyControllerPreset(p_slot->mapping, preset);
+                    auto p_engine = GameEngine();
+                    if (MCC::IsInGame() && p_engine) {
+                        p_engine->load_setting();
+                    }
+                    LOG_INFO("Applied controller preset '{}' to slot {}", GetPresetName(preset), slot_index);
+                }
+                MarkDirty(slot_index);
+            }
+            ImGui::PopItemWidth();
+            if (current_preset[slot_index] == static_cast<int>(ControllerPreset::Custom)) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Edit in Button Mapping)");
+            }
+
+            // Team Preference with color indicator
+            const char* team_names[] = {
+                "Red", "Blue", "Green", "Orange", "Purple", "Gold", "Brown", "Pink"
+            };
+            ImVec4 team_colors[] = {
+                ImVec4(1.0f, 0.2f, 0.2f, 1.0f), ImVec4(0.2f, 0.4f, 1.0f, 1.0f),
+                ImVec4(0.2f, 0.8f, 0.2f, 1.0f), ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                ImVec4(0.6f, 0.2f, 0.8f, 1.0f), ImVec4(1.0f, 0.84f, 0.0f, 1.0f),
+                ImVec4(0.6f, 0.4f, 0.2f, 1.0f), ImVec4(1.0f, 0.4f, 0.7f, 1.0f)
+            };
+
+            ImGui::PushItemWidth(120);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(team_colors[current_team[slot_index]].x * 0.3f,
+                                                            team_colors[current_team[slot_index]].y * 0.3f,
+                                                            team_colors[current_team[slot_index]].z * 0.3f, 1.0f));
+            if (ImGui::Combo("Team Preference", &current_team[slot_index], team_names, IM_ARRAYSIZE(team_names))) {
+                Team team = static_cast<Team>(current_team[slot_index]);
+                if (MCC::IsInGame()) {
+                    ChangePlayerTeam(slot_index, team);
+                }
+                MarkDirty(slot_index);
+                LOG_INFO("Set team preference for slot {} to {}", slot_index, GetTeamName(team));
+            }
+            ImGui::PopStyleColor();
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            DrawTeamColorSquare(static_cast<Team>(current_team[slot_index]));
+
+            // Set Teams Now button - applies teams for all active slots
+            ImGui::SameLine();
+            ImGui::Spacing();
+            ImGui::SameLine();
+            if (ImGui::Button("Set Teams Now")) {
+                ApplyTeamsNow("manual_button");
+            }
+            if (ImGui::IsItemHovered()) {
+                if (MCC::IsInGame()) {
+                    ImGui::SetTooltip("Apply team preferences for all players immediately");
+                } else {
+                    ImGui::SetTooltip("Not in-game: will apply when match starts");
+                }
+            }
+
+            // Show pending status
+            auto p_profile_check = CGameManager::get_profile(slot_index);
+            if (p_profile_check && p_profile_check->team_pending) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "(pending)");
+            }
+
+            ImGui::Unindent();
+        }
+
+        // ========== EXPANDER 2: Spartan Appearance ==========
+        if (s_force_collapse) {
+            ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+        }
+        if (ImGui::CollapsingHeader("Spartan Appearance")) {
+            ImGui::Indent();
+
             bool changed = false;
 
             // Helper macro for randomize buttons
@@ -1312,6 +1995,7 @@ namespace MCC::Splitscreen {
                 if (ImGui::SmallButton("R##" label)) { \
                     field = RandomArmor(max_val); \
                     changed = true; \
+                    MarkDirty(slot_index); \
                 } \
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Randomize " label);
 
@@ -1320,176 +2004,359 @@ namespace MCC::Splitscreen {
                 if (ImGui::SmallButton("R##" label)) { \
                     field = RandomColor(); \
                     changed = true; \
+                    MarkDirty(slot_index); \
                 } \
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Randomize " label);
 
-            ImGui::Separator();
-            if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-                // Randomize All button at top
-                if (ImGui::Button("Randomize Everything")) {
-                    prof.RandomizeAppearance();
+            // Model type toggle at top
+            if (ImGui::Checkbox("Elite Model", &p_slot->profile.UseEliteModel)) {
+                changed = true;
+                MarkDirty(slot_index);
+            }
+
+            // SectionBar open states (static per slot to persist across frames)
+            static bool s_armor_colors_open[4] = {false, false, false, false};
+            static bool s_emblem_open[4] = {false, false, false, false};
+            static bool s_reach_armor_open[4] = {true, true, true, true};  // Default open
+            static bool s_h1_armor_open[4] = {false, false, false, false};
+            static bool s_h2_armor_open[4] = {false, false, false, false};
+            static bool s_h2a_armor_open[4] = {false, false, false, false};
+            static bool s_h3_armor_open[4] = {false, false, false, false};
+            static bool s_h4_armor_open[4] = {false, false, false, false};
+
+            // ===== SUBSECTION A: Armor Colors =====
+            ImGui::Spacing();
+            if (SectionBar("Armor Colors", &s_armor_colors_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                if (ImGui::Button("Randomize Colors")) {
+                    p_slot->profile.PlayerModelPrimaryColorIndex = RandomColor();
+                    p_slot->profile.PlayerModelSecondaryColorIndex = RandomColor();
+                    p_slot->profile.PlayerModelTertiaryColorIndex = RandomColor();
+                    p_slot->profile.PlayerModelPrimaryColor = p_slot->profile.PlayerModelPrimaryColorIndex;
+                    p_slot->profile.PlayerModelSecondaryColor = p_slot->profile.PlayerModelSecondaryColorIndex;
+                    p_slot->profile.PlayerModelTertiaryColor = p_slot->profile.PlayerModelTertiaryColorIndex;
                     changed = true;
+                    MarkDirty(slot_index);
                 }
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Randomize all colors, armor, emblem, and service tag");
+                    ImGui::SetTooltip("Colors apply to all games");
                 }
 
-                ImGui::SameLine();
-                if (ImGui::Button("Randomize Colors Only")) {
-                    prof.user_profile.PlayerModelPrimaryColorIndex = RandomColor();
-                    prof.user_profile.PlayerModelSecondaryColorIndex = RandomColor();
-                    prof.user_profile.PlayerModelTertiaryColorIndex = RandomColor();
-                    prof.user_profile.PlayerModelPrimaryColor = prof.user_profile.PlayerModelPrimaryColorIndex;
-                    prof.user_profile.PlayerModelSecondaryColor = prof.user_profile.PlayerModelSecondaryColorIndex;
-                    prof.user_profile.PlayerModelTertiaryColor = prof.user_profile.PlayerModelTertiaryColorIndex;
+                ImGui::Text("Primary: %d", p_slot->profile.PlayerModelPrimaryColorIndex);
+                RAND_COLOR_BTN("PrimaryColor", p_slot->profile.PlayerModelPrimaryColorIndex);
+                p_slot->profile.PlayerModelPrimaryColor = p_slot->profile.PlayerModelPrimaryColorIndex;
+
+                ImGui::Text("Secondary: %d", p_slot->profile.PlayerModelSecondaryColorIndex);
+                RAND_COLOR_BTN("SecondaryColor", p_slot->profile.PlayerModelSecondaryColorIndex);
+                p_slot->profile.PlayerModelSecondaryColor = p_slot->profile.PlayerModelSecondaryColorIndex;
+
+                ImGui::Text("Tertiary: %d", p_slot->profile.PlayerModelTertiaryColorIndex);
+                RAND_COLOR_BTN("TertiaryColor", p_slot->profile.PlayerModelTertiaryColorIndex);
+                p_slot->profile.PlayerModelTertiaryColor = p_slot->profile.PlayerModelTertiaryColorIndex;
+
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
+
+            // ===== SUBSECTION B: Emblem =====
+            ImGui::Spacing();
+            if (SectionBar("Emblem", &s_emblem_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Emblem editing: use in-game customization");
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
+
+            // ===== SUBSECTION C: Per-Game Armor =====
+            // Note: CUserProfile fields (HelmetIndex, ChestIndex, etc.) are shared across all games.
+            // The same indices map to different items per game. Changing armor here works for ALL games
+            // that support the indices - not just Reach. This is verified by the customization_item array
+            // in CUserProfile.cpp which contains HR_ (Reach), H2A_, H3_, H4_ prefixed items.
+
+            // Halo Reach Armor (verified working)
+            ImGui::Spacing();
+            if (SectionBar("Halo Reach Armor", &s_reach_armor_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                if (ImGui::Button("Randomize Reach Armor")) {
+                    p_slot->profile.HelmetIndex = RandomArmor(NUM_HELMETS);
+                    p_slot->profile.LeftShoulderIndex = RandomArmor(NUM_SHOULDERS);
+                    p_slot->profile.RightShoulderIndex = RandomArmor(NUM_SHOULDERS);
+                    p_slot->profile.ChestIndex = RandomArmor(NUM_CHESTS);
+                    p_slot->profile.ArmsIndex = RandomArmor(NUM_ARMS);
+                    p_slot->profile.LegsIndex = RandomArmor(NUM_LEGS);
+                    p_slot->profile.VisorColorIndex = RandomArmor(NUM_VISORS);
                     changed = true;
+                    MarkDirty(slot_index);
                 }
 
-                ImGui::SameLine();
-                if (ImGui::Button("Randomize Armor Only")) {
-                    prof.user_profile.HelmetIndex = RandomArmor(NUM_HELMETS);
-                    prof.user_profile.LeftShoulderIndex = RandomArmor(NUM_SHOULDERS);
-                    prof.user_profile.RightShoulderIndex = RandomArmor(NUM_SHOULDERS);
-                    prof.user_profile.ChestIndex = RandomArmor(NUM_CHESTS);
-                    prof.user_profile.ArmsIndex = RandomArmor(NUM_ARMS);
-                    prof.user_profile.LegsIndex = RandomArmor(NUM_LEGS);
-                    prof.user_profile.VisorColorIndex = RandomArmor(NUM_VISORS);
-                    changed = true;
-                }
+                ImGui::Text("Helmet: %d", p_slot->profile.HelmetIndex);
+                RAND_BTN("Helmet", p_slot->profile.HelmetIndex, NUM_HELMETS);
 
-                ImGui::Separator();
+                ImGui::Text("Left Shoulder: %d", p_slot->profile.LeftShoulderIndex);
+                RAND_BTN("LeftShoulder", p_slot->profile.LeftShoulderIndex, NUM_SHOULDERS);
 
-                // Model type
-                if (ImGui::Checkbox("Elite Model", &prof.user_profile.UseEliteModel)) {
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("R##Model")) {
-                    std::uniform_int_distribution<int> dist(0, 1);
-                    prof.user_profile.UseEliteModel = dist(GetRNG()) == 1;
-                    changed = true;
-                }
+                ImGui::Text("Right Shoulder: %d", p_slot->profile.RightShoulderIndex);
+                RAND_BTN("RightShoulder", p_slot->profile.RightShoulderIndex, NUM_SHOULDERS);
 
-                ImGui::Separator();
-                ImGui::Text("Colors:");
+                ImGui::Text("Chest: %d", p_slot->profile.ChestIndex);
+                RAND_BTN("Chest", p_slot->profile.ChestIndex, NUM_CHESTS);
 
-                // Primary Color
-                ImGui::Text("  Primary: %d", prof.user_profile.PlayerModelPrimaryColorIndex);
-                RAND_COLOR_BTN("PrimaryColor", prof.user_profile.PlayerModelPrimaryColorIndex);
-                prof.user_profile.PlayerModelPrimaryColor = prof.user_profile.PlayerModelPrimaryColorIndex;
+                ImGui::Text("Arms: %d", p_slot->profile.ArmsIndex);
+                RAND_BTN("Arms", p_slot->profile.ArmsIndex, NUM_ARMS);
 
-                // Secondary Color
-                ImGui::Text("  Secondary: %d", prof.user_profile.PlayerModelSecondaryColorIndex);
-                RAND_COLOR_BTN("SecondaryColor", prof.user_profile.PlayerModelSecondaryColorIndex);
-                prof.user_profile.PlayerModelSecondaryColor = prof.user_profile.PlayerModelSecondaryColorIndex;
+                ImGui::Text("Legs: %d", p_slot->profile.LegsIndex);
+                RAND_BTN("Legs", p_slot->profile.LegsIndex, NUM_LEGS);
 
-                // Tertiary Color
-                ImGui::Text("  Tertiary: %d", prof.user_profile.PlayerModelTertiaryColorIndex);
-                RAND_COLOR_BTN("TertiaryColor", prof.user_profile.PlayerModelTertiaryColorIndex);
-                prof.user_profile.PlayerModelTertiaryColor = prof.user_profile.PlayerModelTertiaryColorIndex;
+                ImGui::Text("Visor: %d", p_slot->profile.VisorColorIndex);
+                RAND_BTN("Visor", p_slot->profile.VisorColorIndex, NUM_VISORS);
 
-                ImGui::Separator();
-                ImGui::Text("Spartan Armor:");
-
-                ImGui::Text("  Helmet: %d", prof.user_profile.HelmetIndex);
-                RAND_BTN("Helmet", prof.user_profile.HelmetIndex, NUM_HELMETS);
-
-                ImGui::Text("  Left Shoulder: %d", prof.user_profile.LeftShoulderIndex);
-                RAND_BTN("LeftShoulder", prof.user_profile.LeftShoulderIndex, NUM_SHOULDERS);
-
-                ImGui::Text("  Right Shoulder: %d", prof.user_profile.RightShoulderIndex);
-                RAND_BTN("RightShoulder", prof.user_profile.RightShoulderIndex, NUM_SHOULDERS);
-
-                ImGui::Text("  Chest: %d", prof.user_profile.ChestIndex);
-                RAND_BTN("Chest", prof.user_profile.ChestIndex, NUM_CHESTS);
-
-                ImGui::Text("  Arms: %d", prof.user_profile.ArmsIndex);
-                RAND_BTN("Arms", prof.user_profile.ArmsIndex, NUM_ARMS);
-
-                ImGui::Text("  Legs: %d", prof.user_profile.LegsIndex);
-                RAND_BTN("Legs", prof.user_profile.LegsIndex, NUM_LEGS);
-
-                ImGui::Text("  Visor: %d", prof.user_profile.VisorColorIndex);
-                RAND_BTN("Visor", prof.user_profile.VisorColorIndex, NUM_VISORS);
-
-                if (prof.user_profile.UseEliteModel) {
+                if (p_slot->profile.UseEliteModel) {
                     ImGui::Separator();
                     ImGui::Text("Elite Armor:");
 
-                    ImGui::Text("  Helmet: %d", prof.user_profile.EliteHelmetIndex);
-                    RAND_BTN("EliteHelmet", prof.user_profile.EliteHelmetIndex, 20);
+                    ImGui::Text("  Helmet: %d", p_slot->profile.EliteHelmetIndex);
+                    RAND_BTN("EliteHelmet", p_slot->profile.EliteHelmetIndex, 20);
 
-                    ImGui::Text("  Left Shoulder: %d", prof.user_profile.EliteLeftShoulderIndex);
-                    RAND_BTN("EliteLeftShoulder", prof.user_profile.EliteLeftShoulderIndex, 10);
+                    ImGui::Text("  Left Shoulder: %d", p_slot->profile.EliteLeftShoulderIndex);
+                    RAND_BTN("EliteLeftShoulder", p_slot->profile.EliteLeftShoulderIndex, 10);
 
-                    ImGui::Text("  Right Shoulder: %d", prof.user_profile.EliteRightShoulderIndex);
-                    RAND_BTN("EliteRightShoulder", prof.user_profile.EliteRightShoulderIndex, 10);
+                    ImGui::Text("  Right Shoulder: %d", p_slot->profile.EliteRightShoulderIndex);
+                    RAND_BTN("EliteRightShoulder", p_slot->profile.EliteRightShoulderIndex, 10);
 
-                    ImGui::Text("  Chest: %d", prof.user_profile.EliteChestIndex);
-                    RAND_BTN("EliteChest", prof.user_profile.EliteChestIndex, 10);
+                    ImGui::Text("  Chest: %d", p_slot->profile.EliteChestIndex);
+                    RAND_BTN("EliteChest", p_slot->profile.EliteChestIndex, 10);
                 }
 
-                ImGui::Separator();
-                ImGui::Text("Emblem:");
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
 
-                ImGui::Text("  Foreground: %d", prof.emblem.foreground);
-                RAND_BTN("EmblemFG", prof.emblem.foreground, NUM_EMBLEM_FOREGROUNDS);
+            // Halo CE/1 Armor - No armor customization in Halo 1
+            ImGui::Spacing();
+            if (SectionBar("Halo CE Armor", &s_h1_armor_open[slot_index], IM_COL32(80, 80, 80, 255))) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Halo CE does not support armor customization.");
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Only colors are available.");
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
 
-                ImGui::Text("  Background: %d", prof.emblem.background);
-                RAND_BTN("EmblemBG", prof.emblem.background, NUM_EMBLEM_BACKGROUNDS);
+            // Halo 2 Classic - Limited armor options
+            ImGui::Spacing();
+            if (SectionBar("Halo 2 Armor", &s_h2_armor_open[slot_index], IM_COL32(80, 80, 80, 255))) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Halo 2 Classic has limited armor options.");
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Colors work; armor pieces are shared with Reach indices.");
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
 
-                ImGui::Text("  Primary Color: %d", prof.emblem.primary_color);
-                RAND_BTN("EmblemPrimary", prof.emblem.primary_color, NUM_EMBLEM_COLORS);
-
-                ImGui::Text("  Secondary Color: %d", prof.emblem.secondary_color);
-                RAND_BTN("EmblemSecondary", prof.emblem.secondary_color, NUM_EMBLEM_COLORS);
-
-                ImGui::Text("  Background Color: %d", prof.emblem.background_color);
-                RAND_BTN("EmblemBGColor", prof.emblem.background_color, NUM_EMBLEM_COLORS);
-
+            // Halo 2 Anniversary - Has armor via H2A_Spartan_* items
+            ImGui::Spacing();
+            if (SectionBar("Halo 2A Armor", &s_h2a_armor_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                // H2A uses the same CUserProfile indices, mapped to H2A_Spartan_* items
+                // Based on CUserProfile.cpp customization_item array: H2A has ~3 variants per piece
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Armor applies via shared indices.");
+                ImGui::Text("Helmet: %d", p_slot->profile.HelmetIndex);
+                RAND_BTN("H2AHelmet", p_slot->profile.HelmetIndex, 30);  // H2A has fewer options
+                ImGui::Text("Chest: %d", p_slot->profile.ChestIndex);
+                RAND_BTN("H2AChest", p_slot->profile.ChestIndex, 20);
+                ImGui::Text("Shoulders: %d/%d", p_slot->profile.LeftShoulderIndex, p_slot->profile.RightShoulderIndex);
                 ImGui::SameLine();
-                if (ImGui::SmallButton("R All##Emblem")) {
-                    prof.emblem.Randomize();
+                if (ImGui::SmallButton("R##H2AShoulders")) {
+                    p_slot->profile.LeftShoulderIndex = RandomArmor(15);
+                    p_slot->profile.RightShoulderIndex = RandomArmor(15);
                     changed = true;
+                    MarkDirty(slot_index);
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Randomize entire emblem");
+                ImGui::Text("Arms: %d", p_slot->profile.ArmsIndex);
+                RAND_BTN("H2AArms", p_slot->profile.ArmsIndex, 10);
+                ImGui::Text("Legs: %d", p_slot->profile.LegsIndex);
+                RAND_BTN("H2ALegs", p_slot->profile.LegsIndex, 10);
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
 
-                ImGui::Separator();
-
-                // Service tag with individual char randomizers
-                char tag_buf[8];
-                for (int i = 0; i < 4; i++) tag_buf[i] = static_cast<char>(prof.service_tag[i]);
-                tag_buf[4] = '\0';
-                ImGui::Text("Service Tag: %s", tag_buf);
+            // Halo 3 - Has armor customization
+            ImGui::Spacing();
+            if (SectionBar("Halo 3 Armor", &s_h3_armor_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Armor applies via shared indices.");
+                ImGui::Text("Helmet: %d", p_slot->profile.HelmetIndex);
+                RAND_BTN("H3Helmet", p_slot->profile.HelmetIndex, 20);
+                ImGui::Text("Chest: %d", p_slot->profile.ChestIndex);
+                RAND_BTN("H3Chest", p_slot->profile.ChestIndex, 15);
+                ImGui::Text("Shoulders: %d/%d", p_slot->profile.LeftShoulderIndex, p_slot->profile.RightShoulderIndex);
                 ImGui::SameLine();
-                if (ImGui::SmallButton("R##Tag")) {
-                    for (int i = 0; i < 4; i++) {
-                        prof.service_tag[i] = RandomTagChar();
-                        prof.user_profile.ServiceTag[i] = prof.service_tag[i];
-                    }
+                if (ImGui::SmallButton("R##H3Shoulders")) {
+                    p_slot->profile.LeftShoulderIndex = RandomArmor(15);
+                    p_slot->profile.RightShoulderIndex = RandomArmor(15);
                     changed = true;
+                    MarkDirty(slot_index);
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Randomize service tag");
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
 
-                // Save and auto-apply if anything changed
-                if (changed) {
-                    SaveProfile(prof, prof.filename);
-                    // Auto-apply the changes to the game
-                    ApplyToSlot(slot_index, prof);
-                    LOG_INFO("Auto-applied changes to slot {}", slot_index);
+            // Halo 4 Armor
+            ImGui::Spacing();
+            if (SectionBar("Halo 4 Armor", &s_h4_armor_open[slot_index])) {
+                ImGui::Indent();
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Armor applies via shared indices.");
+                ImGui::Text("Helmet: %d", p_slot->profile.HelmetIndex);
+                RAND_BTN("H4Helmet", p_slot->profile.HelmetIndex, 50);
+                ImGui::Text("Chest: %d", p_slot->profile.ChestIndex);
+                RAND_BTN("H4Chest", p_slot->profile.ChestIndex, 30);
+                ImGui::Text("Shoulders: %d/%d", p_slot->profile.LeftShoulderIndex, p_slot->profile.RightShoulderIndex);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("R##H4Shoulders")) {
+                    p_slot->profile.LeftShoulderIndex = RandomArmor(30);
+                    p_slot->profile.RightShoulderIndex = RandomArmor(30);
+                    changed = true;
+                    MarkDirty(slot_index);
                 }
+                ImGui::Text("Arms: %d", p_slot->profile.ArmsIndex);
+                RAND_BTN("H4Arms", p_slot->profile.ArmsIndex, 20);
+                ImGui::Text("Legs: %d", p_slot->profile.LegsIndex);
+                RAND_BTN("H4Legs", p_slot->profile.LegsIndex, 20);
+                ImGui::Text("Visor: %d", p_slot->profile.VisorColorIndex);
+                RAND_BTN("H4Visor", p_slot->profile.VisorColorIndex, 20);
+                ImGui::Spacing();
+                ImGui::Unindent();
+            }
+
+            // Apply changes to game if anything changed (debounced)
+            if (changed) {
+                // Use debounced armor application instead of immediate load_setting()
+                // This prevents spamming the game engine with dozens of calls
+                MarkArmorDirty(slot_index);
             }
 
             #undef RAND_BTN
             #undef RAND_COLOR_BTN
+
+            ImGui::Unindent();
         }
 
-        // Show settings status
-        auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+        // ========== EXPANDER 3: Customize Button Mapping ==========
+        if (s_force_collapse) {
+            ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+        }
+        if (ImGui::CollapsingHeader("Customize Button Mapping")) {
+            ImGui::Indent();
+
+            // Gamepad mapping UI
+            p_slot->mapping.ImGuiContext();
+
+            // Axis Options
+            ImGui::Separator();
+            ImGui::Text("Axis Options:");
+            if (ImGui::Checkbox("Invert Y Look", &p_slot->profile.LookControlsInverted)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
+                MarkDirty(slot_index);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Invert vertical look axis for controller (default: OFF)");
+            }
+
+            if (ImGui::Checkbox("Invert Aircraft Controls", &p_slot->profile.AircraftControlsInverted)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
+                MarkDirty(slot_index);
+            }
+
+            ImGui::Unindent();
+        }
+
+        // ========== EXPANDER 4: Advanced Settings ==========
+        if (s_force_collapse) {
+            ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+        }
+        if (ImGui::CollapsingHeader("Advanced Settings")) {
+            ImGui::Indent();
+
+            // Sensitivity sliders
+            ImGui::Text("Look Sensitivity:");
+            if (ImGui::SliderFloat("Axial Deadzone", &p_slot->profile.LookAxialDeadZone, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("Radial Deadzone", &p_slot->profile.LookRadialDeadZone, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("Zoom Sensitivity", &p_slot->profile.ZoomLookSensitivityMultiplier, 0.0f, 2.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("Vehicle Sensitivity", &p_slot->profile.VehicleLookSensitivityMultiplier, 0.0f, 2.0f)) {
+                MarkDirty(slot_index);
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Audio:");
+            if (ImGui::SliderFloat("Master Volume", &p_slot->profile.MasterVolume, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("Music Volume", &p_slot->profile.MusicVolume, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("SFX Volume", &p_slot->profile.SfxVolume, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Display:");
+            if (ImGui::SliderInt("FOV", &p_slot->profile.FOVSetting, 70, 120)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderInt("Vehicle FOV", &p_slot->profile.VehicleFOVSetting, 70, 120)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("HUD Scale", &p_slot->profile.HUDScale, 0.5f, 2.0f)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::SliderFloat("Brightness", &p_slot->profile.Brightness, 0.0f, 1.0f)) {
+                MarkDirty(slot_index);
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Accessibility:");
+            if (ImGui::Checkbox("Subtitles", &p_slot->profile.SubtitleSetting)) {
+                MarkDirty(slot_index);
+            }
+            if (ImGui::Checkbox("Vibration Disabled", &p_slot->profile.VibrationDisabled)) {
+                MarkDirty(slot_index);
+            }
+
+            const char* colorblind_modes[] = {"Off", "Protanopia", "Deuteranopia", "Tritanopia"};
+            if (ImGui::Combo("Colorblind Mode", &p_slot->profile.ColorBlindMode, colorblind_modes, IM_ARRAYSIZE(colorblind_modes))) {
+                MarkDirty(slot_index);
+            }
+
+            ImGui::Unindent();
+        }
+
+        // Show settings status (p_setting already declared above)
         if (!p_setting->b_override_profile || p_setting->b_use_player0_profile) {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
                 "Note: Load will auto-enable required settings");
         }
+
+        // P0-3: Clear force collapse flag after processing this frame
+        // (we only want to collapse once on open/switch, then let user toggle freely)
+        s_force_collapse = false;
 
         ImGui::PopID();
 
@@ -1502,8 +2369,11 @@ namespace MCC::Splitscreen {
         if (ImGui::BeginPopupModal("New Profile", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             static bool randomize_appearance = true;
 
+            // Validate popup_slot is in valid range
+            int safe_slot = (popup_slot >= 0 && popup_slot < 4) ? popup_slot : 0;
+
             ImGui::Text("Enter profile name:");
-            ImGui::InputText("##new_profile_name", new_profile_name, sizeof(new_profile_name));
+            ImGui::InputText("##new_profile_name", new_profile_name[safe_slot], sizeof(new_profile_name[safe_slot]));
 
             ImGui::Checkbox("Randomize colors, emblem & service tag", &randomize_appearance);
             if (ImGui::IsItemHovered()) {
@@ -1511,12 +2381,12 @@ namespace MCC::Splitscreen {
             }
 
             if (ImGui::Button("Create", ImVec2(120, 0))) {
-                if (strlen(new_profile_name) > 0) {
+                if (strlen(new_profile_name[safe_slot]) > 0) {
                     auto p_profile = CGameManager::get_profile(popup_slot);
                     if (p_profile) {
                         PersistentProfile new_prof;
-                        new_prof.filename = std::string(new_profile_name) + ".json";
-                        new_prof.display_name = utf8_to_wstring(new_profile_name);
+                        new_prof.filename = std::string(new_profile_name[safe_slot]) + ".json";
+                        new_prof.display_name = utf8_to_wstring(new_profile_name[safe_slot]);
                         new_prof.controller_preset = static_cast<ControllerPreset>(current_preset[popup_slot]);
                         new_prof.team_preference = static_cast<Team>(current_team[popup_slot]);
                         memcpy(&new_prof.user_profile, &p_profile->profile, sizeof(CUserProfile));
@@ -1534,13 +2404,9 @@ namespace MCC::Splitscreen {
                         if (SaveProfile(new_prof, new_prof.filename)) {
                             LoadAllProfiles();
 
-                            // Find and select the new profile
-                            for (int i = 0; i < (int)profiles.size(); i++) {
-                                if (profiles[i].filename == new_prof.filename) {
-                                    selected_profile_index[popup_slot] = i;
-                                    break;
-                                }
-                            }
+                            // Key-based: directly set the key
+                            selected_profile_key[popup_slot] = new_prof.filename;
+                            LOG_INFO("[NEW] Created and selected profile '{}' for slot {}", new_prof.filename, popup_slot);
                         }
                     }
                     ImGui::CloseCurrentPopup();

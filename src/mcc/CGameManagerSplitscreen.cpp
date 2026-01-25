@@ -112,15 +112,21 @@ CUserProfile* CGameManager::get_player_profile(CGameManager *self, __int64 xid) 
     auto index = get_index(xid);
     auto p_setting = AlphaRing::Global::MCC::Splitscreen();
 
+    // If splitscreen is disabled, use original MCC profile
     if (!p_setting->b_override)
         return ppOriginal.get_player_profile(self, xid);
 
-    if (!p_setting->b_override_profile && ((!index) || (index && p_setting->b_use_player0_profile)))
+    // FIX: Always use custom profile for slot 0 (Player 1) when splitscreen is enabled
+    // This ensures Player 1's armor/settings apply correctly
+    // For other slots: only use original if b_override_profile is false AND b_use_player0_profile is true
+    if (!p_setting->b_override_profile && index && p_setting->b_use_player0_profile)
         return ppOriginal.get_player_profile(self, get_xuid(0));
 
+    // If using Player 0's profile for all players
     if (p_setting->b_use_player0_profile)
         return &get_profile(0)->profile;
 
+    // Each player uses their own custom profile
     return &get_profile(get_index(xid))->profile;
 }
 
@@ -131,7 +137,8 @@ CGamepadMapping* CGameManager::retrive_gamepad_mapping(CGameManager *self, __int
     if (!p_setting->b_override)
         return ppOriginal.retrive_gamepad_mapping(self, xid);
 
-    if (!p_setting->b_override_profile && ((!index) || (index && p_setting->b_use_player0_profile)))
+    // FIX: Same as get_player_profile - always use custom for slot 0
+    if (!p_setting->b_override_profile && index && p_setting->b_use_player0_profile)
         return ppOriginal.retrive_gamepad_mapping(self, get_xuid(0));
 
     if (p_setting->b_use_player0_profile)

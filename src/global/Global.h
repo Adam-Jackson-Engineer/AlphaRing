@@ -40,7 +40,7 @@ namespace AlphaRing::Global {
             int player_count = 1;
 
             // player 0
-            bool b_player0_use_km = true;
+            bool b_player0_use_km = false;  // Default OFF - user must enable manually
             bool b_override_profile = false;
             bool b_use_player0_profile = true;
         };

@@ -553,6 +553,16 @@ namespace MCC::Splitscreen {
         LOG_INFO("[ARMOR] Slot {} scheduling two-shot apply (match start, stagger={})",
             slot_index, stagger_frames);
 
+        // Debug: Extra logging for slot 0 since it had issues
+        if (slot_index == 0) {
+            auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+            LOG_INFO("[ARMOR] Slot 0 debug: b_override={} b_override_profile={} b_use_player0_profile={}",
+                p_setting->b_override, p_setting->b_override_profile, p_setting->b_use_player0_profile);
+            LOG_INFO("[ARMOR] Slot 0 debug: helmet={} chest={} primary_color={}",
+                p_slot->profile.HelmetIndex, p_slot->profile.ChestIndex,
+                p_slot->profile.PlayerModelPrimaryColorIndex);
+        }
+
         // Start in Pending state with negative frame count to delay the start
         p_slot->armor_state = 1;  // Pending (will transition to FirstApply after stagger)
         p_slot->armor_state_frames = -stagger_frames;  // Negative = still waiting

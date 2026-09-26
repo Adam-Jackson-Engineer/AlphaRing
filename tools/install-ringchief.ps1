@@ -18,6 +18,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# SHA-256 via .NET: works even when Windows PowerShell is started from PowerShell 7 and
+# can't load its own hashing cmdlets.
+function Get-Sha256([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path)))).Replace('-', '').ToLower() }
+    finally { $sha.Dispose() }
+}
 $SupportedVersion = '1.3528.0.0'
 
 function Find-SteamLibraries {
@@ -90,7 +97,7 @@ if (Get-Process -Name 'MCC-Win64-Shipping' -ErrorAction SilentlyContinue) {
 }
 
 if (Test-Path $target) {
-    if ((Get-FileHash $target).Hash -eq (Get-FileHash $source).Hash) {
+    if ((Get-Sha256 $target) -eq (Get-Sha256 $source)) {
         Write-Host 'This version is already installed.' -ForegroundColor Green
         exit 0
     }

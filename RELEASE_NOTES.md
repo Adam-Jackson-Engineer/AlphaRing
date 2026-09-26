@@ -1,3 +1,5 @@
+> **Pre-release:** builds and passes its automated tests (including an end-to-end test against the website), but hasn't been played in a live MCC match yet. Try it before a Halo night, not during one.
+
 **For Halo MCC 1.3528.0.0 (Steam).** Install: download `AlphaRing-RingChief-*.zip`, unzip,
 run `install-ringchief.ps1` (or copy `WTSAPI32.dll` into
 `Halo The Master Chief Collection\MCC\Binaries\Win64\`). Full steps: [INSTALL.md](https://github.com/Adam-Jackson-Engineer/AlphaRing/blob/ringchief/INSTALL.md).

@@ -35,7 +35,8 @@ jobs:
           Copy-Item build\Release\WTSAPI32.dll, INSTALL.md, tools\install-ringchief.ps1, LICENCE.txt $pkg
           Compress-Archive -Path "$pkg\*" -DestinationPath "$pkg.zip"
           Copy-Item build\Release\WTSAPI32.dll dist\WTSAPI32.dll
-          Get-ChildItem dist -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS.txt
+          $sums = Get-ChildItem dist -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
+          [IO.File]::WriteAllText("$PWD\dist\SHA256SUMS.txt", (($sums -join "`n") + "`n"))   # LF so sha256sum -c works everywhere
           Get-Content dist\SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v7

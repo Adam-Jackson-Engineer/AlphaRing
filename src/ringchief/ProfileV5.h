@@ -15,7 +15,8 @@ namespace RingChief {
         std::wstring gamertag;
         wchar_t service_tag[5] = {0};
         int team_preference = 0;       // 0-7
-        int controller_preset = 0;     // 0-6 (6 = custom)
+        int controller_preset = 0;     // 0-5 named layout; 6 when a saved mapping applies (modded/custom)
+        int base_preset = 0;           // the named layout as chosen on the website (0-5, or 6 for legacy custom)
         bool has_custom_mapping = false;
         CGamepadMapping custom_mapping{};
         int rank_xp = 0;

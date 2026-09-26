@@ -151,7 +151,9 @@ TEST_CASE("every profile the website can produce parses and builds a sane MCC pr
         REQUIRE(ParseV5(j, p, err));
         CHECK(p.id == j["id"]);
         CHECK(p.team_preference == j["teamPreference"]);
-        CHECK(p.controller_preset == j["controls"]["preset"]);
+        CHECK(p.base_preset == j["controls"]["preset"]);
+        // A saved mapping (modded layout) always applies; otherwise the named layout does.
+        CHECK(p.controller_preset == (j["controls"]["customMapping"].is_array() ? 6 : j["controls"]["preset"].get<int>()));
         if (p.controller_preset == 6) { CHECK(p.has_custom_mapping); customs++; }
 
         CUserProfile up = BuildUserProfile(j);
@@ -181,3 +183,19 @@ TEST_CASE("the built-in baseline is a sane MCC profile") {
 }
 
 }  // TEST_SUITE
+
+TEST_SUITE("profile") {
+TEST_CASE("a modded layout keeps its base layout name and applies the saved buttons") {
+    json m = json::array();
+    for (int i = 0; i < 66; i++) m.push_back(i == 12 ? 12 : 0);   // Sprint (action 12) on A
+    V5Profile p;
+    std::string err;
+    REQUIRE(ParseV5(Profile("p_x", "X", {{"controls", {{"preset", 2}, {"customMapping", m}}}}), p, err));
+    CHECK(p.base_preset == 2);            // "Modded Zoom & Shoot"
+    CHECK(p.controller_preset == 6);      // the saved buttons are what the game gets
+    CHECK(static_cast<int>(p.custom_mapping.actions[12]) == 12);
+    REQUIRE(ParseV5(Profile("p_y", "Y", {{"controls", {{"preset", 2}}}}), p, err));
+    CHECK(p.controller_preset == 2);      // plain Zoom & Shoot
+    CHECK_FALSE(p.has_custom_mapping);
+}
+}

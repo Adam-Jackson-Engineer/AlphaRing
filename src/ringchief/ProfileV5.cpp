@@ -83,6 +83,7 @@ namespace RingChief {
         if (j.contains("controls") && j["controls"].is_object()) {
             const auto& c = j["controls"];
             out.controller_preset = std::clamp(IntOr(c, "preset", 0), 0, 6);
+            out.base_preset = out.controller_preset;
             auto m = c.find("customMapping");
             if (m != c.end() && m->is_array() && m->size() == 66) {
                 out.has_custom_mapping = true;
@@ -92,7 +93,10 @@ namespace RingChief {
                 }
             }
         }
-        if (out.controller_preset == 6 && !out.has_custom_mapping) out.controller_preset = 0;
+        // A saved mapping is the player's layout tweaked on the website ("Modded Zoom & Shoot"):
+        // it wins over the named layout. Without one, the named layout applies as-is.
+        if (out.has_custom_mapping) out.controller_preset = 6;
+        else if (out.controller_preset == 6) out.controller_preset = 0;
 
         out.raw = j;
         return true;

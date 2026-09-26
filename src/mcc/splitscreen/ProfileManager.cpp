@@ -648,13 +648,15 @@ namespace MCC::Splitscreen {
         const auto X = CGamepadMapping::X;
         const auto Y = CGamepadMapping::Y;
 
-        // Action indices (from CGamepadMapping action_names)
+        // Action indices, exactly as in CGamepadMapping's action_names table (MCC's order).
+        // (Until Sept 2026 indices 11+ here were shifted: Sprint pointed at "Player Move
+        // Forward", Equipment at "Editor Ascend", and so on.)
         enum Action {
             Jump = 0, SwitchGrenades = 1, Action_ = 2, Reload = 3, ChangeWeapon = 4,
             Melee = 5, Flashlight = 6, ThrowGrenade = 7, Fire = 8, Crouch = 9,
-            Zoom = 10, SwapReloadLeft = 13, Sprint = 14, BansheeBomb = 15,
-            Scoreboard = 20, VehicleFunc2 = 21, VehicleFunc3 = 22, Equipment = 23,
-            VehicleFunc1 = 24, UseLeftWeapon = 63
+            Zoom = 10, SwapReloadLeft = 11, Sprint = 12, BansheeBomb = 13,
+            Scoreboard = 18, VehicleFunc2 = 19, VehicleFunc3 = 20, Equipment = 21,
+            VehicleFunc1 = 22, UseLeftWeapon = 47
         };
 
         // Clear all mappings first

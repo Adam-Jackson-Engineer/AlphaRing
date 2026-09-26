@@ -77,3 +77,17 @@ endif()
 
 install(TARGETS ${WRAPPER_NAME} DESTINATION "${MCC_DIR}/mcc/binaries/win64")
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/res/" DESTINATION "${MCC_DIR}/alpha_ring")
+
+# Ring Chief tests: the parts that don't need MCC (profile conversion, networking,
+# storage), plus an end-to-end test driven by ringchief/tests/alpharing-integration.js.
+option(RINGCHIEF_TESTS "Build the Ring Chief test executable" ON)
+if (RINGCHIEF_TESTS)
+    add_executable(ringchief_tests
+            tests/main.cpp tests/ringchief_tests.cpp tests/integration_tests.cpp
+            src/ringchief/Http.cpp src/ringchief/LocalLink.cpp src/ringchief/ProfileV5.cpp
+            src/ringchief/Session.cpp src/ringchief/Storage.cpp src/mcc/CUserProfileJson.cpp)
+    target_compile_definitions(ringchief_tests PRIVATE RINGCHIEF_TEST_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures")
+    target_link_libraries(ringchief_tests PRIVATE ws2_32 winhttp crypt32 shell32 ole32)
+    enable_testing()
+    add_test(NAME ringchief_tests COMMAND ringchief_tests)
+endif()

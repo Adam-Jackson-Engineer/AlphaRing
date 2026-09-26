@@ -1,0 +1,434 @@
+{
+ "id": "p_fixture00001",
+ "version": 5,
+ "gamertag": "Fixture Spartan",
+ "serviceTag": "FX01",
+ "emblem": {
+  "fgGame": "halo4",
+  "fg": "Tracker",
+  "bgGame": "halo4",
+  "bg": "Cleft",
+  "primary": "Rust",
+  "secondary": "Maroon",
+  "background": "Lavender",
+  "flags": 0
+ },
+ "nameplateId": "420",
+ "teamPreference": 6,
+ "armor": {
+  "useElite": false,
+  "femaleVoice": false,
+  "helmet": 27,
+  "leftShoulder": 93
+ },
+ "controls": {
+  "preset": 6,
+  "customMapping": [
+   12,
+   5,
+   14,
+   14,
+   15,
+   9,
+   2,
+   11,
+   1,
+   13,
+   0,
+   0,
+   0,
+   8,
+   8,
+   0,
+   0,
+   0,
+   0,
+   0,
+   7,
+   0,
+   0,
+   10,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "lookSensitivityH": 10,
+  "lookSensitivityV": 10,
+  "lookAcceleration": 5,
+  "axialDeadZone": 0,
+  "radialDeadZone": 0,
+  "invertLook": false,
+  "invertAircraft": false,
+  "vibration": false,
+  "crouchLock": false
+ },
+ "mcc": {
+  "ArmsIndex": 0,
+  "AutoCenterEnabled": false,
+  "BackpackIndex": 0,
+  "Brightness": 0,
+  "ButtonPreset": false,
+  "ChestIndex": 8,
+  "ClenchProtectionEnabled": false,
+  "ColorBlindBrightness": 0,
+  "ColorBlindContrast": 0,
+  "ColorBlindMode": 0,
+  "ColorBlindStrength": 0,
+  "ColorCorrection": false,
+  "ControllerBansheeTrickButtonsSwapped": false,
+  "ControllerDualWieldInverted": false,
+  "ControllerHornetControlJoystick": false,
+  "CrosshairLocation": false,
+  "DialogueColorSetting": false,
+  "DialogueColorStyleSetting": false,
+  "DialoguePaletteSetting": false,
+  "DualWieldInverted": false,
+  "EliteArmorEffectIndex": 0,
+  "EliteArmorIndex": 0,
+  "EliteArmsIndex": 0,
+  "EliteChestIndex": 0,
+  "EliteHelmetIndex": 0,
+  "EliteLeftShoulderIndex": 0,
+  "EliteLegsIndex": 0,
+  "ElitePose": 0,
+  "EliteRightShoulderIndex": 0,
+  "EnemyPlayerNameColor": false,
+  "FOVSetting": 0,
+  "FlyingCameraPanning": 3,
+  "FlyingCameraSpeed": 3,
+  "FlyingCameraThrust": 3,
+  "FlyingCameraTurnSensitivity": 3,
+  "GameEngineTimer": 0,
+  "HUDScale": 0,
+  "HoldToZoom": 0,
+  "ImpulseTriggersDisabled": false,
+  "KeyboardMouseButtonPreset": 0,
+  "KneesIndex": 0,
+  "LeftShoulderIndex": 12,
+  "LeftyToggle": false,
+  "LegsIndex": 8,
+  "LoadoutSlots": [
+   {
+    "EquipmentIndex": 0,
+    "GrenadeIndex": 0,
+    "Name": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+    "PrimaryWeaponIndex": 0,
+    "PrimaryWeaponVariantIndex": 0,
+    "SecondaryWeaponIndex": 0,
+    "SecondaryWeaponVariantIndex": 0,
+    "SupportUpgradeIndex": 0,
+    "TacticalPackageIndex": 0
+   },
+   {
+    "EquipmentIndex": 0,
+    "GrenadeIndex": 0,
+    "Name": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+    "PrimaryWeaponIndex": 0,
+    "PrimaryWeaponVariantIndex": 0,
+    "SecondaryWeaponIndex": 0,
+    "SecondaryWeaponVariantIndex": 0,
+    "SupportUpgradeIndex": 0,
+    "TacticalPackageIndex": 0
+   },
+   {
+    "EquipmentIndex": 0,
+    "GrenadeIndex": 0,
+    "Name": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+    "PrimaryWeaponIndex": 0,
+    "PrimaryWeaponVariantIndex": 0,
+    "SecondaryWeaponIndex": 0,
+    "SecondaryWeaponVariantIndex": 0,
+    "SupportUpgradeIndex": 0,
+    "TacticalPackageIndex": 0
+   },
+   {
+    "EquipmentIndex": 0,
+    "GrenadeIndex": 0,
+    "Name": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+    "PrimaryWeaponIndex": 0,
+    "PrimaryWeaponVariantIndex": 0,
+    "SecondaryWeaponIndex": 0,
+    "SecondaryWeaponVariantIndex": 0,
+    "SupportUpgradeIndex": 0,
+    "TacticalPackageIndex": 0
+   },
+   {
+    "EquipmentIndex": 0,
+    "GrenadeIndex": 0,
+    "Name": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+    "PrimaryWeaponIndex": 0,
+    "PrimaryWeaponVariantIndex": 0,
+    "SecondaryWeaponIndex": 0,
+    "SecondaryWeaponVariantIndex": 0,
+    "SupportUpgradeIndex": 0,
+    "TacticalPackageIndex": 0
+   }
+  ],
+  "LockMaxAspectRatio": false,
+  "MKCrouchLockEnabled": false,
+  "MKTheaterPanning": 3,
+  "MKTheaterSpeed": 3,
+  "MKTheaterThrust": 3,
+  "MKTheaterTurnSensitivity": 3,
+  "MasterVolume": 1,
+  "MouseAcceleration": false,
+  "MouseAccelerationExp": 0,
+  "MouseAccelerationMaxAccel": 0,
+  "MouseAccelerationMinRate": 0,
+  "MouseAccelerationScale": 0,
+  "MouseAircraftControlsInverted": false,
+  "MouseLookControlsInverted": false,
+  "MouseSensitivity": 0,
+  "MouseSmoothing": false,
+  "MusicVolume": 1,
+  "OnlineMedalFlasher": false,
+  "PixelPerfectHudScale": 0,
+  "PlayerModelPermutation": 0,
+  "PlayerModelPrimaryColor": 13,
+  "PlayerModelPrimaryColorIndex": 13,
+  "PlayerModelSecondaryColor": 3,
+  "PlayerModelSecondaryColorIndex": 3,
+  "PlayerModelTertiaryColor": 27,
+  "PlayerModelTertiaryColorIndex": 27,
+  "RemasteredHUDSetting": 0,
+  "RightShoulderIndex": 0,
+  "SfxVolume": 1,
+  "Skins": [
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   },
+   {
+    "object": 0,
+    "skin": 0
+   }
+  ],
+  "SpartanArmorEffectIndex": 0,
+  "SpartanBodyIndex": 0,
+  "SpartanPose": 0,
+  "SpeakerColorSetting": false,
+  "SpeakerColorStyleSetting": false,
+  "SpeakerPaletteSetting": false,
+  "SpeakerSetting": false,
+  "StickPreset": false,
+  "SubtitleBackgroundOpacitySetting": 0,
+  "SubtitleBackgroundSetting": false,
+  "SubtitleFontSetting": false,
+  "SubtitleSetting": false,
+  "SubtitleShadowColorSetting": false,
+  "SubtitleShadowOpacitySetting": 0,
+  "SubtitleSizeSetting": false,
+  "SwapTriggersAndBumpers": false,
+  "TheaterPanning": 3,
+  "TheaterSpeed": 3,
+  "TheaterThrust": 3,
+  "TheaterTurnSensitivity": 3,
+  "UseDoublePressJumpToJetpack": false,
+  "UseModernAimControl": false,
+  "UsersSkinsEnabled": false,
+  "UtilityIndex": 0,
+  "VehicleFOVSetting": 0,
+  "VehicleLookSensitivityMultiplier": 0,
+  "VisorColorIndex": 12,
+  "VoiceIndex": 0,
+  "WeaponDisplayOffset": [
+   {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   }
+  ],
+  "WristIndex": 0,
+  "ZoomLookSensitivityMultiplier": 0
+ },
+ "stats": {
+  "games": 7,
+  "wins": 2,
+  "losses": 5,
+  "kills": 40,
+  "deaths": 30,
+  "assists": 9,
+  "score": 44
+ },
+ "rankXp": 35,
+ "updatedAt": "2026-09-26T00:00:00.000Z"
+}

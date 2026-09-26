@@ -14,6 +14,13 @@ Group ID and password (server `halo.dronedude.app`).
 - Players can pick their screen in the overlay or tap "That's me" on their phone.
 - Local backups of the group's profiles on each PC (Ring Chief window → Local backups): play offline from any of the last 20.
 
+### New in pre3
+- Default: player N uses controller N, keyboard & mouse off (choose per screen in the Ring Chief window).
+- Ring Chief and Session Details open at launch; "Splitscreen" is now "Advanced settings".
+- Fixed controller layouts binding Sprint, Equipment, Scoreboard and left-weapon to the wrong actions.
+- Layouts changed on the website ("Modded Zoom & Shoot") apply in game.
+- Mouse: the multi-window blur fix only runs with Nucleus; overlay only keeps clicks on its own windows.
+
 ### Known limits
 - Kills/deaths aren't read from the game yet; the host records scores on the website.
 - Armor item numbers from the website haven't been confirmed in every game yet.

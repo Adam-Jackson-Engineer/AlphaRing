@@ -275,14 +275,11 @@ namespace RingChief::Game {
                 snprintf(label, sizeof(label), "%d##players", n);
                 if (n > 1) ImGui::SameLine();
                 if (ImGui::RadioButton(label, players == n) && players != n) {
-                    if (n == 1) {
-                        ss->b_override = false;          // plain MCC: keyboard, mouse and controller all work
-                    } else {
-                        ss->player_count = n;
-                        ss->b_override = true;           // AlphaRing split-screen
-                        ss->b_override_profile = true;
-                        ss->b_use_player0_profile = false;
-                    }
+                    // Always AlphaRing input: player N = controller N, profiles applied.
+                    ss->player_count = n;
+                    ss->b_override = true;
+                    ss->b_override_profile = true;
+                    ss->b_use_player0_profile = false;
                     g_session->SlotsChanged();
                 }
             }
@@ -291,13 +288,15 @@ namespace RingChief::Game {
 
             ImGui::Text("Player 1 uses");
             ImGui::SameLine();
-            if (players == 1) {
-                ImGui::TextDisabled("keyboard, mouse or controller");
+            if (!ss->b_override) {
+                ImGui::TextDisabled("anything (split-screen is off)");
             } else {
-                if (ImGui::RadioButton("Controller##p1", !ss->b_player0_use_km)) ss->b_player0_use_km = false;
+                if (ImGui::RadioButton("Controller 1##p1", !ss->b_player0_use_km)) ss->b_player0_use_km = false;
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Keyboard & mouse##p1", ss->b_player0_use_km)) ss->b_player0_use_km = true;
             }
+            if (ss->b_override && players > 1)
+                ImGui::TextDisabled("Players 2-%d use controllers 2-%d.", players, players);
         }
 
         void TroubleshootingSection() {

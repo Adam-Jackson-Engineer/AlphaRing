@@ -40,6 +40,17 @@ namespace MCC::Splitscreen {
         ProfileManager::ResetTeamState();
 
         const auto& inst_cfg = AlphaRing::Config::GetInstanceConfig();
+        if (!inst_cfg.loaded) {
+            // Single window: AlphaRing input from the start. Player N = controller N,
+            // keyboard & mouse off (turn it on per screen in the Ring Chief window), and
+            // Ring Chief profiles apply (plain MCC mode would use MCC's own profile).
+            auto p_setting = AlphaRing::Global::MCC::Splitscreen();
+            p_setting->player_count = 1;
+            p_setting->b_override = true;
+            p_setting->b_override_profile = true;
+            p_setting->b_use_player0_profile = false;
+            p_setting->b_player0_use_km = false;
+        }
         if (inst_cfg.loaded) {
             // Launched by Nucleus: start with split-screen off so the instance can join LAN
             // first; the host turns it on from the overlay.

@@ -40,12 +40,14 @@ function Find-SteamLibraries {
     $roots += 'C:\Program Files (x86)\Steam'
     $libs = @()
     foreach ($root in ($roots | Select-Object -Unique)) {
-        if (-not (Test-Path $root)) { continue }
+        if (-not (Test-Path -LiteralPath $root -ErrorAction SilentlyContinue)) { continue }
         $libs += $root
-        $vdf = Join-Path $root 'steamapps\libraryfolders.vdf'
-        if (Test-Path $vdf) {
-            foreach ($m in [regex]::Matches((Get-Content $vdf -Raw), '"path"\s+"([^"]+)"')) {
-                $libs += ($m.Groups[1].Value -replace '\\\\', '\')
+        $vdf = $root + '\steamapps\libraryfolders.vdf'
+        if (Test-Path -LiteralPath $vdf) {
+            foreach ($m in [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"')) {
+                # Libraries can live on drives that aren't plugged in; skip those quietly.
+                $lib = $m.Groups[1].Value -replace '\\\\', '\'
+                if (Test-Path -LiteralPath $lib -ErrorAction SilentlyContinue) { $libs += $lib }
             }
         }
     }
@@ -54,8 +56,8 @@ function Find-SteamLibraries {
 
 function Find-MCC {
     foreach ($lib in Find-SteamLibraries) {
-        $candidate = Join-Path $lib 'steamapps\common\Halo The Master Chief Collection'
-        if (Test-Path (Join-Path $candidate 'MCC\Binaries\Win64\MCC-Win64-Shipping.exe')) { return $candidate }
+        $candidate = $lib + '\steamapps\common\Halo The Master Chief Collection'
+        if (Test-Path -LiteralPath ($candidate + '\MCC\Binaries\Win64\MCC-Win64-Shipping.exe')) { return $candidate }
     }
     return $null
 }

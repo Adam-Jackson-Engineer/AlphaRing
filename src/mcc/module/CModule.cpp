@@ -1,6 +1,8 @@
 #include <unordered_map>
 #include "CModule.h"
 
+#include "global/Global.h"
+
 CModule::CModule(EntrySet *entrySet, std::initializer_list<CPatch> patches)
 : m_entries(entrySet), m_patches(patches) {};
 
@@ -13,7 +15,11 @@ void CModule::load_module(const module_info_t *p_info) {
 
     m_patches.update(m_info.hModule);
 
-    m_patches.apply();
+    // Only apply splitscreen patches when splitscreen override is enabled.
+    // These patches modify game engine join validation and player checks which
+    // interfere with Goldberg LAN networking when splitscreen is not needed.
+    if (AlphaRing::Global::MCC::Splitscreen()->b_override)
+        m_patches.apply();
 
     if (m_entries)
         m_entries->update(m_info.hModule);

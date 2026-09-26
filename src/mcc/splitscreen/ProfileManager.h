@@ -7,15 +7,16 @@
 
 namespace MCC::Splitscreen {
 
-    // Controller preset types
+    // Controller preset types - Universal presets only (present in all MCC games)
+    // Mappings based on Halo Reach as primary, with game-specific actions (Sprint, etc.) from H4/H3/H2
     enum class ControllerPreset {
-        Default = 0,
-        BumperJumper,
-        Fishstick,
-        Recon,
-        UniversalReclaimer,
-        UniversalZoomAndShoot,
-        Custom,
+        UniversalDefaultRecon = 0,
+        UniversalReclaimer = 1,
+        UniversalZoomAndShoot = 2,
+        UniversalBumpAndJump = 3,
+        UniversalGreenThumbs = 4,
+        UniversalInfinite = 5,
+        Custom = 6,
         COUNT
     };
 
@@ -141,6 +142,7 @@ namespace MCC::Splitscreen {
         static void UpdateLiveStats(int slot_index, int kills, int deaths, int assists, int score);
         static void WriteMatchHistory();
         static std::string GetHistoryPath();
+        static int GetMatchEpoch() { return s_match_start_epoch; }
 
     private:
         static bool EnsureProfilesDirectory();
@@ -195,7 +197,7 @@ namespace MCC::Splitscreen {
         10000   // Level 50: Captain
     };
 
-    constexpr int PROFILE_VERSION = 2;
+    constexpr int PROFILE_VERSION = 4;
 
     // Number of available colors in MCC palette
     constexpr int NUM_ARMOR_COLORS = 32;

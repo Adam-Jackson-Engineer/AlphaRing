@@ -27,13 +27,19 @@ namespace MCC::Module {
             {OFFSET_MCC_PF_MODULEUNLOAD, OFFSET_MCC_WS_PF_MODULEUNLOAD, module_unload, (void **)&ppOriginal_module_unload},
         });
 
-        assertm(result, "MCC:Module: failed to create hook");
+        if (!result) {
+            LOG_ERROR("MCC:Module: failed to create hook");
+            return false;
+        }
 
         result = AlphaRing::Hook::Patch("KERNEL32.DLL", {
             {"IsDebuggerPresent", "\x31\xC0\xC3\x90\x90\x90\x90", 7}
         });
 
-        assertm(result, "MCC:Module: failed to patch module \"kernel32.dll\"");
+        if (!result) {
+            LOG_ERROR("MCC:Module: failed to patch kernel32.dll IsDebuggerPresent");
+            return false;
+        }
 
         // reload patch at startup
         ReloadPatch("../../../alpha_ring/patch.xml");

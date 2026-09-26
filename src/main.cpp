@@ -4,45 +4,35 @@
 #include "hook/Hook.h"
 #include "render/Render.h"
 #include "mcc/mcc.h"
+#include "filesystem/Filesystem.h"
+
+// Global DLL handle - set in DllMain
+static HMODULE g_hDllModule = nullptr;
+
+HMODULE AlphaRing::GetDllHandle() {
+    return g_hDllModule;
+}
 
 static bool Initialize() {
     bool result;
 
     result = AlphaRing::Log::Init();
-
-    assertm(result, "failed to initialize log");
+    if (!result) return false;
 
     result = AlphaRing::Hook::Initialize();
+    if (!result) { LOG_ERROR("failed to initialize hook"); return false; }
 
-    assertm(result, "failed to initialize hook");
-
-    //LOG_INFO("Initialized AlphaRing.");
-    
     result = AlphaRing::Filesystem::Init();
-
-    assertm(result, "failed to initialize filesystem");
-
-	//LOG_INFO("Initialized filesystem.");
+    if (!result) { LOG_ERROR("failed to initialize filesystem"); return false; }
 
     result = AlphaRing::Input::Init();
-
-    assertm(result, "failed to initialize input");
-
-	//LOG_INFO("Initialized input.");
+    if (!result) { LOG_ERROR("failed to initialize input"); return false; }
 
     result = AlphaRing::Render::Initialize();
-
-    assertm(result, "failed to initialize render");
-
-	//LOG_INFO("Initialized render.");
+    if (!result) { LOG_ERROR("failed to initialize render"); return false; }
 
     result = MCC::Initialize();
-
-    assertm(result, "failed to initialize mcc");
-
-	//LOG_INFO("Initialized mcc.");
-
-    //LOG_INFO("Game Version[{}]: {}", AlphaRing::Hook::IsWS() ? "Windows Store" : "Steam", GAME_VERSION);
+    if (!result) { LOG_ERROR("failed to initialize mcc"); return false; }
 
     return true;
 }
@@ -58,8 +48,9 @@ static bool Shutdown() {
     return true;
 }
 
-BOOL APIENTRY DllMain(HANDLE handle, DWORD reason, LPVOID reserved) {
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
+        g_hDllModule = hModule;
         CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)Initialize, nullptr, 0, nullptr);
     } else if (reason == DLL_PROCESS_DETACH) {
         if (reserved == nullptr)

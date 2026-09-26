@@ -107,26 +107,33 @@ namespace AlphaRing::Render::D3d11 {
         bool result;
 
         result = RegisterClass(&wc);
-
-        assertm(result, "failed to register class");
+        if (!result) return false;
 
         auto hwnd = CreateWindow(wc.lpszClassName, "Default Window", WS_OVERLAPPEDWINDOW, 0, 0,
                                      800, 600, nullptr, nullptr, wc.hInstance, nullptr);
-
-        assertm(hwnd != nullptr, "failed to create window");
+        if (hwnd == nullptr) {
+            UnregisterClass(wc.lpszClassName, wc.hInstance);
+            return false;
+        }
 
         hD3d11 = GetModuleHandle("d3d11.dll");
-
-        assertm(hD3d11 != nullptr, "failed to find module \"d3d11.dll\"");
+        if (hD3d11 == nullptr) {
+            DestroyWindow(hwnd);
+            UnregisterClass(wc.lpszClassName, wc.hInstance);
+            return false;
+        }
 
         p_fD3D11CreateDeviceAndSwapChain = (decltype(p_fD3D11CreateDeviceAndSwapChain)) GetProcAddress(
                 hD3d11, "D3D11CreateDeviceAndSwapChain");
+        if (p_fD3D11CreateDeviceAndSwapChain == nullptr) {
+            DestroyWindow(hwnd);
+            UnregisterClass(wc.lpszClassName, wc.hInstance);
+            return false;
+        }
 
-        assertm(p_fD3D11CreateDeviceAndSwapChain != nullptr, "failed to find function \"D3D11CreateDeviceAndSwapChain\"");
-
-        IDXGISwapChain *swapChain;
-        ID3D11Device *device;
-        ID3D11DeviceContext *context;
+        IDXGISwapChain *swapChain = nullptr;
+        ID3D11Device *device = nullptr;
+        ID3D11DeviceContext *context = nullptr;
 
         D3D_FEATURE_LEVEL featureLevel;
         const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_11_0};
@@ -157,7 +164,14 @@ namespace AlphaRing::Render::D3d11 {
         result = SUCCEEDED(p_fD3D11CreateDeviceAndSwapChain(0, D3D_DRIVER_TYPE_HARDWARE, 0, 0, featureLevels, 2, D3D11_SDK_VERSION,
                                                             &swapChainDesc, &swapChain, &device, &featureLevel, &context));
 
-        assertm(result, "failed to create device and swapchain");
+        if (!result || swapChain == nullptr) {
+            if (swapChain) swapChain->Release();
+            if (device) device->Release();
+            if (context) context->Release();
+            DestroyWindow(hwnd);
+            UnregisterClass(wc.lpszClassName, wc.hInstance);
+            return false;
+        }
 
         memcpy(functions, *(void **) swapChain, 18 * sizeof(void *));
 
@@ -172,8 +186,6 @@ namespace AlphaRing::Render::D3d11 {
             {functions[8],  Present,       (void **) &ppOriginal_Present},
             {functions[13], ResizeBuffers, (void **) &ppOriginal_ResizeBuffers},
         });
-
-        assertm(result, "failed to create d3d11 hook");
 
         return result;
     }

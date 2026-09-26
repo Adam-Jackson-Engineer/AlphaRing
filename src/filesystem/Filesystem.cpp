@@ -3,6 +3,44 @@
 #include <filesystem>
 #include <fstream>
 
+// Cached DLL directory path
+static std::string s_dllAlphaRingDir;
+
+std::string AlphaRing::Filesystem::GetDllAlphaRingDir() {
+    if (!s_dllAlphaRingDir.empty()) {
+        return s_dllAlphaRingDir;
+    }
+
+    // Get the DLL's full path
+    HMODULE hModule = AlphaRing::GetDllHandle();
+    if (hModule) {
+        char dllPath[MAX_PATH] = {};
+        DWORD len = GetModuleFileNameA(hModule, dllPath, MAX_PATH);
+        if (len > 0) {
+            // DLL is at: <instance>/MCC/Binaries/Win64/WTSAPI32.dll
+            // alpha_ring is at: <instance>/MCC/Binaries/Win64/alpha_ring
+            std::filesystem::path p(dllPath);
+            std::filesystem::path alphaRingDir = p.parent_path() / "alpha_ring";
+            s_dllAlphaRingDir = alphaRingDir.string();
+
+            // Write to a debug file to help diagnose multi-instance issues
+            std::ofstream debugFile(s_dllAlphaRingDir + "/dll_path_debug.txt");
+            if (debugFile.is_open()) {
+                debugFile << "DLL Path: " << dllPath << std::endl;
+                debugFile << "Alpha Ring Dir: " << s_dllAlphaRingDir << std::endl;
+                debugFile << "PID: " << GetCurrentProcessId() << std::endl;
+                debugFile.close();
+            }
+
+            return s_dllAlphaRingDir;
+        }
+    }
+
+    // Fallback to CWD-relative path
+    s_dllAlphaRingDir = "./alpha_ring";
+    return s_dllAlphaRingDir;
+}
+
 bool AlphaRing::Filesystem::Init() {
     const char* home_dir = "../../../alpha_ring";
 

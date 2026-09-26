@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 struct CUserProfile {
     bool SubtitleSetting; // 0x0
     bool SubtitleSizeSetting; // 0x1
@@ -68,9 +70,9 @@ struct CUserProfile {
     struct Skin_t { int object; int skin; } Skins[32]; // 0xAC
     wchar_t ServiceTag[4]; // 0x1AC
     bool OnlineMedalFlasher; // 0x1B4
-    bool VerticalLookSensitivity; // 0x1B5
-    bool HorizontalLookSensitivity; // 0x1B6
-    bool LookAcceleration; // 0x1B7
+    uint8_t VerticalLookSensitivity; // 0x1B5 (1-10, default 3)
+    uint8_t HorizontalLookSensitivity; // 0x1B6 (1-10, default 3)
+    uint8_t LookAcceleration; // 0x1B7 (1-5, default 3)
     float LookAxialDeadZone; // 0x1B8
     float LookRadialDeadZone; // 0x1BC
     float ZoomLookSensitivityMultiplier; // 0x1C0
@@ -78,18 +80,18 @@ struct CUserProfile {
     bool ButtonPreset; // 0x1C8
     bool StickPreset; // 0x1C9
     bool LeftyToggle; // 0x1CA
-    bool FlyingCameraTurnSensitivity; // 0x1CB
-    bool FlyingCameraPanning; // 0x1CC
-    bool FlyingCameraSpeed; // 0x1CD
-    bool FlyingCameraThrust; // 0x1CE
-    bool TheaterTurnSensitivity; // 0x1CF
-    bool TheaterPanning; // 0x1D0
-    bool TheaterSpeed; // 0x1D1
-    bool TheaterThrust; // 0x1D2
-    bool MKTheaterTurnSensitivity; // 0x1D3
-    bool MKTheaterPanning; // 0x1D4
-    bool MKTheaterSpeed; // 0x1D5
-    bool MKTheaterThrust; // 0x1D6
+    uint8_t FlyingCameraTurnSensitivity; // 0x1CB (1-10)
+    uint8_t FlyingCameraPanning; // 0x1CC (1-10)
+    uint8_t FlyingCameraSpeed; // 0x1CD (1-10)
+    uint8_t FlyingCameraThrust; // 0x1CE (1-10)
+    uint8_t TheaterTurnSensitivity; // 0x1CF (1-10)
+    uint8_t TheaterPanning; // 0x1D0 (1-10)
+    uint8_t TheaterSpeed; // 0x1D1 (1-10)
+    uint8_t TheaterThrust; // 0x1D2 (1-10)
+    uint8_t MKTheaterTurnSensitivity; // 0x1D3 (1-10)
+    uint8_t MKTheaterPanning; // 0x1D4 (1-10)
+    uint8_t MKTheaterSpeed; // 0x1D5 (1-10)
+    uint8_t MKTheaterThrust; // 0x1D6 (1-10)
     bool SwapTriggersAndBumpers; // 0x1D7
     bool UseModernAimControl; // 0x1D8
     bool UseDoublePressJumpToJetpack; // 0x1D9

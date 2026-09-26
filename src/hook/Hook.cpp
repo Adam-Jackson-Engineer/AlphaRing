@@ -51,8 +51,7 @@ namespace AlphaRing::Hook {
 					return true;
             }
 
-            sprintf(buffer, "Version mismatch [%s]:%s", GAME_VERSION, version.toString().c_str());
-            MessageBoxA(nullptr, buffer, "Error", MB_OK);
+            LOG_ERROR("Version mismatch [{}]:{}", GAME_VERSION, version.toString());
             return false;
         }
 

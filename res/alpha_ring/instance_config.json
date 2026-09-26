@@ -1,18 +1,23 @@
 {
-  "version": 1,
+  "version": 3,
 
   "instance": {
     "id": "inst_0",
     "launched_at": "2026-01-23T19:00:00Z"
   },
 
-  "player": {
-    "profile_name": "Spartan_Blue.json",
-    "controller_guid": "{TEST-GUID-0000-0000-000000000001}",
-    "controller_index": 0,
-    "display_name": "TestPlayer",
-    "is_primary": true
-  },
+  "ringchief_enabled": true,
+  "player_count": 1,
+
+  "players": [
+    {
+      "profile_name": "Spartan_Blue.json",
+      "controller_guid": "{TEST-GUID-0000-0000-000000000001}",
+      "controller_index": 0,
+      "display_name": "TestPlayer",
+      "is_primary": true
+    }
+  ],
 
   "screen": {
     "position": "top-left",
@@ -29,5 +34,14 @@
     "session_id": "test_session_001",
     "total_players": 4,
     "player_index": 0
+  },
+
+  "server": {
+    "enabled": true,
+    "ip": "127.0.0.1",
+    "port": 42069,
+    "auto_reconnect": true,
+    "heartbeat_interval_ms": 5000,
+    "stats_interval_ms": 250
   }
 }

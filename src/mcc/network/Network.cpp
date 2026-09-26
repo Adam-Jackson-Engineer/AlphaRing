@@ -154,19 +154,11 @@ namespace MCC::Network {
     }
 
     bool Initialize() {
-        bool result;
-
-        result = AlphaRing::Hook::Detour("winhttp.dll", {
-                { "WinHttpConnect", (void**)&ppOriginal_dWinHttpConnect, dWinHttpConnect },
-                { "WinHttpOpenRequest", (void**)&ppOriginal_dWinHttpOpenRequest, dWinHttpOpenRequest },
-                { "WinHttpAddRequestHeaders", (void**)&ppOriginal_dWinHttpAddRequestHeaders, dWinHttpAddRequestHeaders },
-                { "WinHttpWriteData", (void**)&ppOriginal_dWinHttpWriteData, dWinHttpWriteData },
-                { "WinHttpReadData", (void**)&ppOriginal_dWinHttpReadData, dWinHttpReadData },
-                { "WinHttpCloseHandle", (void**)&ppOriginal_dWinHttpCloseHandle, dWinHttpCloseHandle }
-        });
-
-        assertm(result, "MCC:Network: failed to create hook");
-
+        // WinHTTP monitoring hooks are disabled - they are diagnostic-only (network
+        // traffic capture) and interfere with Goldberg Steam emulator LAN networking
+        // used by Nucleus Co-op. The hooks add mutex locks and interception to every
+        // HTTP call which can disrupt peer discovery and session joining.
+        LOG_INFO("MCC:Network: Initialized (WinHTTP monitoring disabled)");
         return true;
     }
 }

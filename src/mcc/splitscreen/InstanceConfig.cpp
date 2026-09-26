@@ -18,25 +18,27 @@ namespace MCC::Splitscreen {
         p_cfg->loaded = false;
 
         if (!fs::exists(config_path)) {
-            LOG_INFO("No instance_config.json found - using manual profile selection");
+            LOG_INFO("[RINGCHIEF] No instance_config.json found - using manual profile selection");
             return false;
         }
 
         try {
             std::ifstream file(config_path);
             if (!file.is_open()) {
-                LOG_WARNING("Could not open instance_config.json");
+                LOG_WARNING("[RINGCHIEF] Could not open instance_config.json");
                 return false;
             }
 
             json j = json::parse(file);
 
-            // Version check
+            // Version check (accept 1, 2, or 3)
             int version = j.value("version", 0);
-            if (version != 1) {
-                LOG_WARNING("instance_config.json has unsupported version {}", version);
+            if (version < 1 || version > 3) {
+                LOG_WARNING("[RINGCHIEF] instance_config.json has unsupported version {}", version);
                 return false;
             }
+
+            LOG_INFO("[RINGCHIEF] Splitscreen::LoadInstanceConfig: parsing version {}", version);
 
             // Instance info
             if (j.contains("instance")) {
@@ -47,17 +49,60 @@ namespace MCC::Splitscreen {
                 p_cfg->instance_id = "unknown";
             }
 
-            // Player info (required section)
-            if (!j.contains("player")) {
-                LOG_ERROR("instance_config.json missing 'player' section");
-                return false;
+            // V2: RingChief multi-player fields
+            p_cfg->ringchief_enabled = j.value("ringchief_enabled", false);
+
+            if (version >= 2 && j.contains("players") && j["players"].is_array()) {
+                // V2 path: parse players array
+                p_cfg->player_count = j.value("player_count", 1);
+                auto& players_arr = j["players"];
+
+                LOG_INFO("[RINGCHIEF] Parsing {} player entries for global config", players_arr.size());
+
+                for (size_t i = 0; i < players_arr.size() && i < 4; i++) {
+                    auto& p = players_arr[i];
+                    p_cfg->players[i].profile_name = p.value("profile_name", "");
+                    p_cfg->players[i].controller_guid = p.value("controller_guid", "");
+                    p_cfg->players[i].controller_index = p.value("controller_index", static_cast<int>(i));
+                    p_cfg->players[i].display_name = p.value("display_name", "Player " + std::to_string(i + 1));
+                    p_cfg->players[i].is_primary = p.value("is_primary", false);
+
+                    LOG_INFO("[RINGCHIEF]   Global slot {}: profile='{}', name='{}', ctrl={}",
+                        i, p_cfg->players[i].profile_name,
+                        p_cfg->players[i].display_name,
+                        p_cfg->players[i].controller_index);
+                }
+
+                // Populate v1 fields from first player (backward compat)
+                if (p_cfg->player_count > 0) {
+                    p_cfg->profile_name = p_cfg->players[0].profile_name;
+                    p_cfg->controller_guid = p_cfg->players[0].controller_guid;
+                    p_cfg->controller_index = p_cfg->players[0].controller_index;
+                    p_cfg->display_name = p_cfg->players[0].display_name;
+                    p_cfg->is_primary = p_cfg->players[0].is_primary;
+                }
+            } else {
+                // V1 path: single player block
+                p_cfg->player_count = 1;
+
+                if (!j.contains("player")) {
+                    LOG_ERROR("[RINGCHIEF] instance_config.json v1 missing 'player' section");
+                    return false;
+                }
+                auto& player = j["player"];
+                p_cfg->profile_name = player.value("profile_name", "");
+                p_cfg->controller_guid = player.value("controller_guid", "");
+                p_cfg->controller_index = player.value("controller_index", 0);
+                p_cfg->display_name = player.value("display_name", "Player");
+                p_cfg->is_primary = player.value("is_primary", false);
+
+                // Also populate players[0] for uniform access
+                p_cfg->players[0].profile_name = p_cfg->profile_name;
+                p_cfg->players[0].controller_guid = p_cfg->controller_guid;
+                p_cfg->players[0].controller_index = p_cfg->controller_index;
+                p_cfg->players[0].display_name = p_cfg->display_name;
+                p_cfg->players[0].is_primary = p_cfg->is_primary;
             }
-            auto& player = j["player"];
-            p_cfg->profile_name = player.value("profile_name", "");
-            p_cfg->controller_guid = player.value("controller_guid", "");
-            p_cfg->controller_index = player.value("controller_index", 0);
-            p_cfg->display_name = player.value("display_name", "Player");
-            p_cfg->is_primary = player.value("is_primary", false);
 
             // Screen info
             if (j.contains("screen")) {
@@ -76,41 +121,60 @@ namespace MCC::Splitscreen {
                 p_cfg->monitor_index = 0;
             }
 
-            // Session info (required section)
-            if (!j.contains("session")) {
-                LOG_ERROR("instance_config.json missing 'session' section");
-                return false;
+            // Session info
+            if (j.contains("session")) {
+                auto& session = j["session"];
+                p_cfg->session_id = session.value("session_id", "");
+                p_cfg->total_players = session.value("total_players", 1);
+                p_cfg->player_index = session.value("player_index", 0);
             }
-            auto& session = j["session"];
-            p_cfg->session_id = session.value("session_id", "");
-            p_cfg->total_players = session.value("total_players", 1);
-            p_cfg->player_index = session.value("player_index", 0);
+
+            // Server config (v3)
+            if (j.contains("server")) {
+                auto& server = j["server"];
+                p_cfg->server.enabled = server.value("enabled", false);
+                p_cfg->server.ip = server.value("ip", "127.0.0.1");
+                p_cfg->server.port = server.value("port", 42069);
+                p_cfg->server.auto_reconnect = server.value("auto_reconnect", true);
+                p_cfg->server.heartbeat_interval_ms = server.value("heartbeat_interval_ms", 5000);
+                p_cfg->server.stats_interval_ms = server.value("stats_interval_ms", 250);
+            }
 
             p_cfg->loaded = true;
 
-            LOG_INFO("=== Loaded Instance Config ===");
-            LOG_INFO("  Instance: {} (player {}/{})",
-                p_cfg->instance_id, p_cfg->player_index + 1, p_cfg->total_players);
-            LOG_INFO("  Profile: {}", p_cfg->profile_name);
-            LOG_INFO("  Display name: {}", p_cfg->display_name);
-            LOG_INFO("  Controller index: {}", p_cfg->controller_index);
-            LOG_INFO("  Screen: {} on monitor {}", p_cfg->screen_position, p_cfg->monitor_index);
+            LOG_INFO("[RINGCHIEF] === Loaded Instance Config (v{}) ===", version);
+            LOG_INFO("[RINGCHIEF]   Instance: {}", p_cfg->instance_id);
+            LOG_INFO("[RINGCHIEF]   RingChief enabled: {}", p_cfg->ringchief_enabled ? "yes" : "no");
+            LOG_INFO("[RINGCHIEF]   Player count: {} (total session: {})",
+                p_cfg->player_count, p_cfg->total_players);
+            for (int i = 0; i < p_cfg->player_count && i < 4; i++) {
+                LOG_INFO("[RINGCHIEF]   Slot {}: '{}' profile='{}' ctrl={} primary={}",
+                    i, p_cfg->players[i].display_name, p_cfg->players[i].profile_name,
+                    p_cfg->players[i].controller_index,
+                    p_cfg->players[i].is_primary ? "yes" : "no");
+            }
+            LOG_INFO("[RINGCHIEF]   Screen: {} on monitor {}", p_cfg->screen_position, p_cfg->monitor_index);
             if (p_cfg->bounds_width > 0) {
-                LOG_INFO("  Bounds: {}x{} at ({},{})",
+                LOG_INFO("[RINGCHIEF]   Bounds: {}x{} at ({},{})",
                     p_cfg->bounds_width, p_cfg->bounds_height,
                     p_cfg->bounds_x, p_cfg->bounds_y);
             }
-            LOG_INFO("  Session: {}", p_cfg->session_id);
-            LOG_INFO("  Primary: {}", p_cfg->is_primary ? "yes" : "no");
-            LOG_INFO("==============================");
+            LOG_INFO("[RINGCHIEF]   Session: {}", p_cfg->session_id);
+            if (p_cfg->server.enabled) {
+                LOG_INFO("[RINGCHIEF]   Server: {}:{} (heartbeat={}ms, stats={}ms)",
+                    p_cfg->server.ip, p_cfg->server.port,
+                    p_cfg->server.heartbeat_interval_ms,
+                    p_cfg->server.stats_interval_ms);
+            }
+            LOG_INFO("[RINGCHIEF] ==============================");
 
             return true;
 
         } catch (const json::exception& e) {
-            LOG_ERROR("Failed to parse instance_config.json: {}", e.what());
+            LOG_ERROR("[RINGCHIEF] Failed to parse instance_config.json: {}", e.what());
             return false;
         } catch (const std::exception& e) {
-            LOG_ERROR("Error loading instance_config.json: {}", e.what());
+            LOG_ERROR("[RINGCHIEF] Error loading instance_config.json: {}", e.what());
             return false;
         }
     }

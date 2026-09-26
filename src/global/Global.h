@@ -37,12 +37,17 @@ namespace AlphaRing::Global {
     namespace MCC {
         DefGlobal(Splitscreen) {
             bool b_override;
-            int player_count = 1;
+            int player_count = 4;
 
             // player 0
             bool b_player0_use_km = false;  // Default OFF - user must enable manually
             bool b_override_profile = false;
             bool b_use_player0_profile = true;
+        };
+
+        DefGlobal(Display) {
+            bool enabled = true;
+            int broadcast_interval_ms = 250;  // 4Hz update rate
         };
     }
 
@@ -55,7 +60,7 @@ namespace AlphaRing::Global {
         std::string instance_id;
         std::string launched_at;
 
-        // Player info
+        // V1 single-player info (backward compat; v2 populates from players[0])
         std::string profile_name;      // e.g., "Spartan_Blue.json"
         std::string controller_guid;   // Windows device GUID
         int controller_index = 0;      // 0-3, XInput slot
@@ -74,5 +79,26 @@ namespace AlphaRing::Global {
         std::string session_id;        // Shared across all instances
         int total_players = 1;
         int player_index = 0;          // 0-based index
+
+        // V2: RingChief multi-player support
+        bool ringchief_enabled = false;
+        int player_count = 1;          // Players in THIS instance
+        struct PlayerSlot {
+            std::string profile_name;
+            std::string controller_guid;
+            int controller_index = 0;
+            std::string display_name;
+            bool is_primary = false;
+        } players[4];                  // Fixed 4 slots (max per instance)
+
+        // V3: Ring Chief Server connection
+        struct ServerConfig {
+            bool enabled = false;
+            std::string ip = "127.0.0.1";
+            int port = 42069;
+            bool auto_reconnect = true;
+            int heartbeat_interval_ms = 5000;
+            int stats_interval_ms = 250;
+        } server;
     };
 }

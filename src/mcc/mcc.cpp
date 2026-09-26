@@ -8,6 +8,8 @@
 #include "mcc/module/Module.h"
 #include "mcc/network/Network.h"
 #include "mcc/splitscreen/Splitscreen.h"
+#include "mcc/display/DisplayBroadcaster.h"
+#include "mcc/server/RingChiefClient.h"
 
 namespace MCC {
     static bool* bIsInGame;
@@ -36,45 +38,47 @@ namespace MCC {
             {0x4000BC8/*0x3FFCAC0*/ , 0x3E4FA18/*0x3E4B060*/, (void**)&g_ppGameGlobal},
         });
 
-        assertm(ppGameEngine != nullptr, "MCC: failed to get ppGameEngine");
-        assertm(game_manager != nullptr, "MCC: failed to get pGameManager");
-        assertm(device_manager != nullptr, "MCC: failed to get ppDeviceManager");
+        if (ppGameEngine == nullptr) { LOG_ERROR("MCC: failed to get ppGameEngine"); return false; }
+        if (game_manager == nullptr) { LOG_ERROR("MCC: failed to get pGameManager"); return false; }
+        if (device_manager == nullptr) { LOG_ERROR("MCC: failed to get ppDeviceManager"); return false; }
 
         result = CGameEngine::Initialize(ppGameEngine);
-
-        assertm(result, "MCC: failed to initialize GameEngine");
+        if (!result) { LOG_ERROR("MCC: failed to initialize GameEngine"); return false; }
 
         result = CGameManager::Initialize(game_manager);
+        if (!result) { LOG_ERROR("MCC: failed to initialize GameManager"); return false; }
 
-        assertm(result, "MCC: failed to initialize GameManager");
-
-        assertm(GameManager() != nullptr, "MCC:Splitscreen: GameManager is null"); // static instance
+        if (GameManager() == nullptr) { LOG_ERROR("MCC: GameManager is null"); return false; }
 
         result = CDeviceManager::Initialize(device_manager);
-
-        assertm(result, "MCC: failed to initialize DeviceManager");
+        if (!result) { LOG_ERROR("MCC: failed to initialize DeviceManager"); return false; }
 
         if (!Module::Initialize())
         {
-			MessageBox(nullptr, "MCC: failed to initialize Module", "Error", MB_OK);
+            LOG_ERROR("MCC: failed to initialize Module");
             return false;
         }
 
         if (!Splitscreen::Initialize())
         {
-			MessageBox(nullptr, "MCC: failed to initialize Splitscreen", "Error", MB_OK);
+            LOG_ERROR("MCC: failed to initialize Splitscreen");
             return false;
         }
 
-		////Ask user if they want to enable network
-  //      if (MessageBox(nullptr, "Would you like to enable network?", "Network", MB_YESNO) == IDYES)
-  //      {
-  //          if (!Network::Initialize())
-  //          {
-  //              MessageBox(nullptr, "MCC: failed to initialize Network", "Error", MB_OK);
-  //              return false;
-  //          }
-  //      }
+        if (!Network::Initialize())
+            return false;
+
+        if (!Display::Initialize())
+        {
+            LOG_WARNING("MCC: failed to initialize Display (non-fatal)");
+            // Non-fatal - display is optional
+        }
+
+        if (!Server::Client::Initialize())
+        {
+            LOG_WARNING("MCC: failed to initialize Ring Chief Server client (non-fatal)");
+            // Non-fatal - server connection is optional
+        }
 
         return true;
     }

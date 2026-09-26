@@ -14,6 +14,8 @@
 
 #include "mcc/mcc.h"
 #include "mcc/CGameGlobal.h"
+#include "mcc/display/DisplayBroadcaster.h"
+#include "mcc/server/RingChiefClient.h"
 
 static ICContext* pages[7] {
         nullptr,
@@ -70,11 +72,19 @@ namespace AlphaRing::Render::ImGui {
 
         AlphaRing::Input::Update();
 
+        // Always update server communication and stats broadcast, regardless of UI visibility
+        // This ensures Ring Chief Display stays connected even when UI is hidden (F4)
+        MCC::Display::BroadcastStats();
+        MCC::Server::Client::Update();
+
         if (!AlphaRing::Global::Global()->show_imgui || !AlphaRing::Global::Global()->show_imgui_mouse)
             ::ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
-        if (!AlphaRing::Global::Global()->show_imgui)
+        if (!AlphaRing::Global::Global()->show_imgui) {
+            // Must still end the ImGui frame even when not rendering UI
+            ::ImGui::EndFrame();
             return;
+        }
 
         g_pMCCContext->render();
 

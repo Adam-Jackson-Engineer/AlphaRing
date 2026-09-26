@@ -182,7 +182,7 @@ namespace MCC::Splitscreen {
 
     PersistentProfile::PersistentProfile()
         : filename(""), display_name(L"New Profile"), rank_xp(0), rank_level(1),
-          controller_preset(ControllerPreset::Default), team_preference(Team::Red) {
+          controller_preset(ControllerPreset::UniversalDefaultRecon), team_preference(Team::Red) {
         memset(service_tag, 0, sizeof(service_tag));
         service_tag[0] = L'N';
         service_tag[1] = L'E';
@@ -285,12 +285,12 @@ namespace MCC::Splitscreen {
 
     const char* GetPresetName(ControllerPreset preset) {
         switch (preset) {
-            case ControllerPreset::Default: return "Default";
-            case ControllerPreset::BumperJumper: return "Bumper Jumper";
-            case ControllerPreset::Fishstick: return "Fishstick";
-            case ControllerPreset::Recon: return "Recon";
+            case ControllerPreset::UniversalDefaultRecon: return "Universal Default (Recon)";
             case ControllerPreset::UniversalReclaimer: return "Universal Reclaimer";
             case ControllerPreset::UniversalZoomAndShoot: return "Universal Zoom & Shoot";
+            case ControllerPreset::UniversalBumpAndJump: return "Universal Bump & Jump";
+            case ControllerPreset::UniversalGreenThumbs: return "Universal Green Thumbs";
+            case ControllerPreset::UniversalInfinite: return "Universal Infinite";
             case ControllerPreset::Custom: return "Custom";
             default: return "Unknown";
         }
@@ -734,47 +734,16 @@ namespace MCC::Splitscreen {
         // Clear all mappings first
         memset(&mapping, 0, sizeof(mapping));
 
+        // Universal presets - present in all MCC games (Reach, CE, H2, H3, ODST, H4).
+        // Base mappings from Halo Reach. Game-specific actions layered in:
+        //   Sprint from H4, SwapReloadLeft/UseLeftWeapon from H2/H3.
         switch (preset) {
-            case ControllerPreset::Default:
-                // Standard MCC Default layout
+            case ControllerPreset::UniversalDefaultRecon:
+                // Universal Default (Recon): The standard universal layout.
+                // Reach: LB=SwitchGrenade, B=Melee, X=ArmorAbility, RB=Action/Reload
+                // H4 adds: LB=Sprint | H3 adds: LB=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
                 mapping.actions[Jump] = A;
-                mapping.actions[SwitchGrenades] = B;
-                mapping.actions[Action_] = X;
-                mapping.actions[Reload] = X;
-                mapping.actions[ChangeWeapon] = Y;
-                mapping.actions[Melee] = B;
-                mapping.actions[Flashlight] = DUp;
-                mapping.actions[ThrowGrenade] = LT;
-                mapping.actions[Fire] = RT;
-                mapping.actions[Crouch] = LS;
-                mapping.actions[Zoom] = RS;
-                mapping.actions[Sprint] = LB;
-                mapping.actions[Equipment] = RB;
-                mapping.actions[Scoreboard] = Back;
-                break;
-
-            case ControllerPreset::BumperJumper:
-                // Bumper Jumper - Jump on LB
-                mapping.actions[Jump] = LB;
-                mapping.actions[SwitchGrenades] = B;
-                mapping.actions[Action_] = X;
-                mapping.actions[Reload] = X;
-                mapping.actions[ChangeWeapon] = Y;
-                mapping.actions[Melee] = RB;
-                mapping.actions[Flashlight] = DUp;
-                mapping.actions[ThrowGrenade] = LT;
-                mapping.actions[Fire] = RT;
-                mapping.actions[Crouch] = LS;
-                mapping.actions[Zoom] = RS;
-                mapping.actions[Sprint] = A;
-                mapping.actions[Equipment] = DLeft;
-                mapping.actions[Scoreboard] = Back;
-                break;
-
-            case ControllerPreset::Recon:
-                // Recon - Melee on RB, Zoom on LS
-                mapping.actions[Jump] = A;
-                mapping.actions[SwitchGrenades] = X;
+                mapping.actions[SwitchGrenades] = LB;
                 mapping.actions[Action_] = RB;
                 mapping.actions[Reload] = RB;
                 mapping.actions[ChangeWeapon] = Y;
@@ -782,33 +751,102 @@ namespace MCC::Splitscreen {
                 mapping.actions[Flashlight] = DUp;
                 mapping.actions[ThrowGrenade] = LT;
                 mapping.actions[Fire] = RT;
-                mapping.actions[Crouch] = RS;
-                mapping.actions[Zoom] = LS;
-                mapping.actions[Sprint] = LB;
-                mapping.actions[Equipment] = DLeft;
+                mapping.actions[Crouch] = LS;
+                mapping.actions[Zoom] = RS;
+                mapping.actions[Equipment] = X;
                 mapping.actions[Scoreboard] = Back;
+                mapping.actions[Sprint] = LB;
+                mapping.actions[SwapReloadLeft] = LB;
+                mapping.actions[UseLeftWeapon] = LT;
                 break;
 
-            case ControllerPreset::UniversalZoomAndShoot:
-                // Universal Zoom and Shoot - Zoom on LT, Grenade on LB
+            case ControllerPreset::UniversalReclaimer:
+                // Universal Reclaimer: RB=Melee, LB=ArmorAbility, B=Crouch, X=Action/Reload
+                // H4 adds: LS=Sprint | H3 adds: LS=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
                 mapping.actions[Jump] = A;
-                mapping.actions[SwitchGrenades] = B;
+                mapping.actions[SwitchGrenades] = DRight;
                 mapping.actions[Action_] = X;
                 mapping.actions[Reload] = X;
                 mapping.actions[ChangeWeapon] = Y;
                 mapping.actions[Melee] = RB;
                 mapping.actions[Flashlight] = DUp;
-                mapping.actions[ThrowGrenade] = LB;
+                mapping.actions[ThrowGrenade] = LT;
                 mapping.actions[Fire] = RT;
-                mapping.actions[Crouch] = LS;
-                mapping.actions[Zoom] = LT;
-                mapping.actions[Sprint] = RS;
-                mapping.actions[Equipment] = DLeft;
+                mapping.actions[Crouch] = B;
+                mapping.actions[Zoom] = RS;
+                mapping.actions[Equipment] = LB;
                 mapping.actions[Scoreboard] = Back;
+                mapping.actions[Sprint] = LS;
+                mapping.actions[SwapReloadLeft] = LS;
+                mapping.actions[UseLeftWeapon] = LT;
                 break;
 
-            case ControllerPreset::Fishstick:
-                // Fishstick - CoD-style layout
+            case ControllerPreset::UniversalZoomAndShoot:
+                // Universal Zoom & Shoot: LT=Zoom, RB=ThrowGrenade, RS=Melee
+                // H4 adds: LS=Sprint | H3 adds: LS=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
+                mapping.actions[Jump] = A;
+                mapping.actions[SwitchGrenades] = DRight;
+                mapping.actions[Action_] = X;
+                mapping.actions[Reload] = X;
+                mapping.actions[ChangeWeapon] = Y;
+                mapping.actions[Melee] = RS;
+                mapping.actions[Flashlight] = DUp;
+                mapping.actions[ThrowGrenade] = RB;
+                mapping.actions[Fire] = RT;
+                mapping.actions[Crouch] = B;
+                mapping.actions[Zoom] = LT;
+                mapping.actions[Equipment] = LB;
+                mapping.actions[Scoreboard] = Back;
+                mapping.actions[Sprint] = LS;
+                mapping.actions[SwapReloadLeft] = LS;
+                mapping.actions[UseLeftWeapon] = LT;
+                break;
+
+            case ControllerPreset::UniversalBumpAndJump:
+                // Universal Bump & Jump: LB=Jump, RB=Melee, B=Action/Reload
+                // H4 adds: A=Sprint | H3 adds: A=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
+                mapping.actions[Jump] = LB;
+                mapping.actions[SwitchGrenades] = DRight;
+                mapping.actions[Action_] = B;
+                mapping.actions[Reload] = B;
+                mapping.actions[ChangeWeapon] = Y;
+                mapping.actions[Melee] = RB;
+                mapping.actions[Flashlight] = DUp;
+                mapping.actions[ThrowGrenade] = LT;
+                mapping.actions[Fire] = RT;
+                mapping.actions[Crouch] = LS;
+                mapping.actions[Zoom] = RS;
+                mapping.actions[Equipment] = X;
+                mapping.actions[Scoreboard] = Back;
+                mapping.actions[Sprint] = A;
+                mapping.actions[SwapReloadLeft] = A;
+                mapping.actions[UseLeftWeapon] = LT;
+                break;
+
+            case ControllerPreset::UniversalGreenThumbs:
+                // Universal Green Thumbs: RS=Melee, RB=Zoom, LB=ArmorAbility
+                // H4 adds: LS=Sprint | H3 adds: LS=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
+                mapping.actions[Jump] = A;
+                mapping.actions[SwitchGrenades] = DRight;
+                mapping.actions[Action_] = X;
+                mapping.actions[Reload] = X;
+                mapping.actions[ChangeWeapon] = Y;
+                mapping.actions[Melee] = RS;
+                mapping.actions[Flashlight] = DUp;
+                mapping.actions[ThrowGrenade] = LT;
+                mapping.actions[Fire] = RT;
+                mapping.actions[Crouch] = B;
+                mapping.actions[Zoom] = RB;
+                mapping.actions[Equipment] = LB;
+                mapping.actions[Scoreboard] = Back;
+                mapping.actions[Sprint] = LS;
+                mapping.actions[SwapReloadLeft] = LS;
+                mapping.actions[UseLeftWeapon] = LT;
+                break;
+
+            case ControllerPreset::UniversalInfinite:
+                // Universal Infinite: LB=ThrowGrenade, LT=Zoom, RS=Melee, RB=ArmorAbility
+                // H4 adds: LS=Sprint | H3 adds: LS=SwapReloadLeft | H2 adds: LT=UseLeftWeapon
                 mapping.actions[Jump] = A;
                 mapping.actions[SwitchGrenades] = DRight;
                 mapping.actions[Action_] = X;
@@ -820,27 +858,11 @@ namespace MCC::Splitscreen {
                 mapping.actions[Fire] = RT;
                 mapping.actions[Crouch] = B;
                 mapping.actions[Zoom] = LT;
-                mapping.actions[Sprint] = LS;
                 mapping.actions[Equipment] = RB;
                 mapping.actions[Scoreboard] = Back;
-                break;
-
-            case ControllerPreset::UniversalReclaimer:
-                // Universal Reclaimer
-                mapping.actions[Jump] = A;
-                mapping.actions[SwitchGrenades] = DRight;
-                mapping.actions[Action_] = X;
-                mapping.actions[Reload] = X;
-                mapping.actions[ChangeWeapon] = Y;
-                mapping.actions[Melee] = RB;
-                mapping.actions[Flashlight] = DUp;
-                mapping.actions[ThrowGrenade] = LB;
-                mapping.actions[Fire] = RT;
-                mapping.actions[Crouch] = RS;
-                mapping.actions[Zoom] = LT;
                 mapping.actions[Sprint] = LS;
-                mapping.actions[Equipment] = B;
-                mapping.actions[Scoreboard] = Back;
+                mapping.actions[SwapReloadLeft] = LS;
+                mapping.actions[UseLeftWeapon] = LT;
                 break;
 
             case ControllerPreset::Custom:
@@ -1127,9 +1149,19 @@ namespace MCC::Splitscreen {
         if (j.contains("SpartanPose")) p.SpartanPose = j["SpartanPose"].get<int>();
         if (j.contains("ElitePose")) p.ElitePose = j["ElitePose"].get<int>();
         if (j.contains("OnlineMedalFlasher")) p.OnlineMedalFlasher = j["OnlineMedalFlasher"].get<bool>();
-        if (j.contains("VerticalLookSensitivity")) p.VerticalLookSensitivity = j["VerticalLookSensitivity"].get<bool>();
-        if (j.contains("HorizontalLookSensitivity")) p.HorizontalLookSensitivity = j["HorizontalLookSensitivity"].get<bool>();
-        if (j.contains("LookAcceleration")) p.LookAcceleration = j["LookAcceleration"].get<bool>();
+        // Sensitivity fields: backward-compatible (bool -> default 3, int -> use value)
+        if (j.contains("VerticalLookSensitivity")) {
+            auto& v = j["VerticalLookSensitivity"];
+            p.VerticalLookSensitivity = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("HorizontalLookSensitivity")) {
+            auto& v = j["HorizontalLookSensitivity"];
+            p.HorizontalLookSensitivity = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("LookAcceleration")) {
+            auto& v = j["LookAcceleration"];
+            p.LookAcceleration = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
         if (j.contains("LookAxialDeadZone")) p.LookAxialDeadZone = j["LookAxialDeadZone"].get<float>();
         if (j.contains("LookRadialDeadZone")) p.LookRadialDeadZone = j["LookRadialDeadZone"].get<float>();
         if (j.contains("ZoomLookSensitivityMultiplier")) p.ZoomLookSensitivityMultiplier = j["ZoomLookSensitivityMultiplier"].get<float>();
@@ -1137,18 +1169,55 @@ namespace MCC::Splitscreen {
         if (j.contains("ButtonPreset")) p.ButtonPreset = j["ButtonPreset"].get<bool>();
         if (j.contains("StickPreset")) p.StickPreset = j["StickPreset"].get<bool>();
         if (j.contains("LeftyToggle")) p.LeftyToggle = j["LeftyToggle"].get<bool>();
-        if (j.contains("FlyingCameraTurnSensitivity")) p.FlyingCameraTurnSensitivity = j["FlyingCameraTurnSensitivity"].get<bool>();
-        if (j.contains("FlyingCameraPanning")) p.FlyingCameraPanning = j["FlyingCameraPanning"].get<bool>();
-        if (j.contains("FlyingCameraSpeed")) p.FlyingCameraSpeed = j["FlyingCameraSpeed"].get<bool>();
-        if (j.contains("FlyingCameraThrust")) p.FlyingCameraThrust = j["FlyingCameraThrust"].get<bool>();
-        if (j.contains("TheaterTurnSensitivity")) p.TheaterTurnSensitivity = j["TheaterTurnSensitivity"].get<bool>();
-        if (j.contains("TheaterPanning")) p.TheaterPanning = j["TheaterPanning"].get<bool>();
-        if (j.contains("TheaterSpeed")) p.TheaterSpeed = j["TheaterSpeed"].get<bool>();
-        if (j.contains("TheaterThrust")) p.TheaterThrust = j["TheaterThrust"].get<bool>();
-        if (j.contains("MKTheaterTurnSensitivity")) p.MKTheaterTurnSensitivity = j["MKTheaterTurnSensitivity"].get<bool>();
-        if (j.contains("MKTheaterPanning")) p.MKTheaterPanning = j["MKTheaterPanning"].get<bool>();
-        if (j.contains("MKTheaterSpeed")) p.MKTheaterSpeed = j["MKTheaterSpeed"].get<bool>();
-        if (j.contains("MKTheaterThrust")) p.MKTheaterThrust = j["MKTheaterThrust"].get<bool>();
+        // Theater/camera sensitivity fields: backward-compatible (bool -> default 3, int -> use value)
+        if (j.contains("FlyingCameraTurnSensitivity")) {
+            auto& v = j["FlyingCameraTurnSensitivity"];
+            p.FlyingCameraTurnSensitivity = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("FlyingCameraPanning")) {
+            auto& v = j["FlyingCameraPanning"];
+            p.FlyingCameraPanning = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("FlyingCameraSpeed")) {
+            auto& v = j["FlyingCameraSpeed"];
+            p.FlyingCameraSpeed = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("FlyingCameraThrust")) {
+            auto& v = j["FlyingCameraThrust"];
+            p.FlyingCameraThrust = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("TheaterTurnSensitivity")) {
+            auto& v = j["TheaterTurnSensitivity"];
+            p.TheaterTurnSensitivity = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("TheaterPanning")) {
+            auto& v = j["TheaterPanning"];
+            p.TheaterPanning = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("TheaterSpeed")) {
+            auto& v = j["TheaterSpeed"];
+            p.TheaterSpeed = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("TheaterThrust")) {
+            auto& v = j["TheaterThrust"];
+            p.TheaterThrust = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("MKTheaterTurnSensitivity")) {
+            auto& v = j["MKTheaterTurnSensitivity"];
+            p.MKTheaterTurnSensitivity = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("MKTheaterPanning")) {
+            auto& v = j["MKTheaterPanning"];
+            p.MKTheaterPanning = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("MKTheaterSpeed")) {
+            auto& v = j["MKTheaterSpeed"];
+            p.MKTheaterSpeed = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
+        if (j.contains("MKTheaterThrust")) {
+            auto& v = j["MKTheaterThrust"];
+            p.MKTheaterThrust = v.is_boolean() ? 3 : v.get<uint8_t>();
+        }
         if (j.contains("SwapTriggersAndBumpers")) p.SwapTriggersAndBumpers = j["SwapTriggersAndBumpers"].get<bool>();
         if (j.contains("UseModernAimControl")) p.UseModernAimControl = j["UseModernAimControl"].get<bool>();
         if (j.contains("UseDoublePressJumpToJetpack")) p.UseDoublePressJumpToJetpack = j["UseDoublePressJumpToJetpack"].get<bool>();
@@ -1228,6 +1297,27 @@ namespace MCC::Splitscreen {
                 if (offsets[i].contains("z")) p.WeaponDisplayOffset[i].z = offsets[i]["z"].get<float>();
             }
         }
+
+        // Clamp sensitivity fields to valid ranges
+        auto clamp8 = [](uint8_t& val, uint8_t lo, uint8_t hi) {
+            if (val < lo) val = lo;
+            if (val > hi) val = hi;
+        };
+        clamp8(p.VerticalLookSensitivity, 1, 10);
+        clamp8(p.HorizontalLookSensitivity, 1, 10);
+        clamp8(p.LookAcceleration, 1, 5);
+        clamp8(p.FlyingCameraTurnSensitivity, 1, 10);
+        clamp8(p.FlyingCameraPanning, 1, 10);
+        clamp8(p.FlyingCameraSpeed, 1, 10);
+        clamp8(p.FlyingCameraThrust, 1, 10);
+        clamp8(p.TheaterTurnSensitivity, 1, 10);
+        clamp8(p.TheaterPanning, 1, 10);
+        clamp8(p.TheaterSpeed, 1, 10);
+        clamp8(p.TheaterThrust, 1, 10);
+        clamp8(p.MKTheaterTurnSensitivity, 1, 10);
+        clamp8(p.MKTheaterPanning, 1, 10);
+        clamp8(p.MKTheaterSpeed, 1, 10);
+        clamp8(p.MKTheaterThrust, 1, 10);
     }
 
     static void to_json(json& j, const CGamepadMapping& m) {
@@ -1249,40 +1339,11 @@ namespace MCC::Splitscreen {
     }
 
     std::string ProfileManager::GetProfilesPath() {
-        // Use absolute path based on the DLL's location to ensure consistency
-        // DLL is at: ...\Halo The Master Chief Collection\MCC\Binaries\Win64\WTSAPI32.dll
-        // Profiles are at: ...\Halo The Master Chief Collection\alpha_ring\profiles
-        static std::string s_cached_path;
-        if (s_cached_path.empty()) {
-            char module_path[MAX_PATH] = {0};
-            HMODULE hm = NULL;
-            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)&GetProfilesPath, &hm)) {
-                GetModuleFileNameA(hm, module_path, MAX_PATH);
-            }
-
-            std::string module_str = module_path;
-            // Navigate from MCC\Binaries\Win64\ up to GAME ROOT (not MCC subfolder)
-            // Look for \MCC\Binaries\Win64\ to find game root correctly
-            size_t pos = module_str.rfind("\\MCC\\Binaries\\Win64\\");
-            if (pos != std::string::npos) {
-                // We're running as DLL inside MCC - go to game root's alpha_ring
-                s_cached_path = module_str.substr(0, pos) + "\\alpha_ring\\profiles";
-            } else {
-                // Fallback: try old pattern (might be different directory structure)
-                pos = module_str.rfind("\\Binaries\\Win64\\");
-                if (pos != std::string::npos) {
-                    s_cached_path = module_str.substr(0, pos) + "\\alpha_ring\\profiles";
-                } else {
-                    // Last resort: relative path (dev/testing scenario)
-                    s_cached_path = "./alpha_ring/profiles";
-                }
-            }
-
-            LOG_INFO("[PATH] ModuleDir={}", module_path);
-            LOG_INFO("[PATH] ProfilesDir={}", s_cached_path);
-        }
+        // Centralized profile storage location
+        // All profiles are stored in RingChief directory for easy machine migration
+        // The entire C:\RingChief folder can be zipped and moved to another machine
+        static std::string s_cached_path = "C:\\RingChief\\profiles";
+        LOG_INFO("[PATH] ProfilesDir={}", s_cached_path);
         return s_cached_path;
     }
 
@@ -1331,7 +1392,9 @@ namespace MCC::Splitscreen {
                         PersistentProfile profile;
                         profile.filename = entry.path().filename().string();
 
-                        if (j.contains("display_name")) {
+                        if (j.contains("gamer_tag")) {
+                            profile.display_name = utf8_to_wstring(j["gamer_tag"].get<std::string>());
+                        } else if (j.contains("display_name")) {
                             profile.display_name = utf8_to_wstring(j["display_name"].get<std::string>());
                         }
 
@@ -1353,6 +1416,16 @@ namespace MCC::Splitscreen {
                         // Load controller preset
                         if (j.contains("controller_preset")) {
                             int preset_val = j["controller_preset"].get<int>();
+                            // Migration from old enum to new Universal-only enum:
+                            // Old: 0=Default, 1=BumperJumper, 2=Fishstick, 3=Recon,
+                            //      4=Southpaw, 5=Boxer, 6=GreenThumb, 7=Custom
+                            // New: 0=UniversalDefaultRecon, 1=UniversalReclaimer, 2=UniversalZoomAndShoot,
+                            //      3=UniversalBumpAndJump, 4=UniversalGreenThumbs, 5=UniversalInfinite, 6=Custom
+                            if (preset_val >= static_cast<int>(ControllerPreset::COUNT)) {
+                                // Old values 7+ (Custom was 7) -> new Custom (6)
+                                preset_val = static_cast<int>(ControllerPreset::Custom);
+                                LOG_INFO("  Migrated old preset({}) -> Custom({})", j["controller_preset"].get<int>(), preset_val);
+                            }
                             if (preset_val >= 0 && preset_val < static_cast<int>(ControllerPreset::COUNT)) {
                                 profile.controller_preset = static_cast<ControllerPreset>(preset_val);
                             }
@@ -1449,34 +1522,50 @@ namespace MCC::Splitscreen {
         std::string filepath = GetProfilesPath() + "/" + filename;
 
         try {
+            // Load existing JSON first to preserve fields we don't manage
+            // (e.g., ProfileEditor's name-based emblem fields, nameplate data)
             json j;
+            {
+                std::ifstream existing(filepath);
+                if (existing.is_open()) {
+                    try {
+                        j = json::parse(existing);
+                    } catch (...) {
+                        j = json::object();
+                    }
+                }
+            }
+
             j["version"] = PROFILE_VERSION;
-            j["display_name"] = wstring_to_utf8(profile.display_name);
+            j["gamer_tag"] = wstring_to_utf8(profile.display_name);
+            j.erase("display_name");
             j["service_tag"] = wstring_to_utf8(std::wstring(profile.service_tag, 4));
             j["rank_xp"] = profile.rank_xp;
             j["controller_preset"] = static_cast<int>(profile.controller_preset);
             j["team_preference"] = static_cast<int>(profile.team_preference);
 
             // Emblem configuration
-            j["emblem"] = json{
-                {"foreground", profile.emblem.foreground},
-                {"background", profile.emblem.background},
-                {"flags", profile.emblem.flags},
-                {"primary_color", profile.emblem.primary_color},
-                {"secondary_color", profile.emblem.secondary_color},
-                {"background_color", profile.emblem.background_color}
-            };
+            if (!j.contains("emblem") || !j["emblem"].is_object()) {
+                j["emblem"] = json::object();
+            }
+            j["emblem"]["foreground"] = profile.emblem.foreground;
+            j["emblem"]["background"] = profile.emblem.background;
+            j["emblem"]["flags"] = profile.emblem.flags;
+            j["emblem"]["primary_color"] = profile.emblem.primary_color;
+            j["emblem"]["secondary_color"] = profile.emblem.secondary_color;
+            j["emblem"]["background_color"] = profile.emblem.background_color;
 
-            // Career stats (persistent across sessions)
-            j["career_stats"] = json{
-                {"games_played", profile.career_stats.games_played},
-                {"wins", profile.career_stats.wins},
-                {"losses", profile.career_stats.losses},
-                {"total_kills", profile.career_stats.total_kills},
-                {"total_deaths", profile.career_stats.total_deaths},
-                {"total_assists", profile.career_stats.total_assists},
-                {"total_score", profile.career_stats.total_score}
-            };
+            // Career stats - merge into existing to preserve any extra fields
+            if (!j.contains("career_stats") || !j["career_stats"].is_object()) {
+                j["career_stats"] = json::object();
+            }
+            j["career_stats"]["games_played"] = profile.career_stats.games_played;
+            j["career_stats"]["wins"] = profile.career_stats.wins;
+            j["career_stats"]["losses"] = profile.career_stats.losses;
+            j["career_stats"]["total_kills"] = profile.career_stats.total_kills;
+            j["career_stats"]["total_deaths"] = profile.career_stats.total_deaths;
+            j["career_stats"]["total_assists"] = profile.career_stats.total_assists;
+            j["career_stats"]["total_score"] = profile.career_stats.total_score;
 
             json user_profile_json;
             to_json(user_profile_json, profile.user_profile);
@@ -1739,16 +1828,27 @@ namespace MCC::Splitscreen {
                 selected_profile_key[slot_index] = "";
                 ClearDirty(slot_index);
             }
-            for (int i = 0; i < (int)profiles.size(); i++) {
-                bool is_selected = (selected_profile_key[slot_index] == profiles[i].filename);
-                if (ImGui::Selectable(profiles[i].filename.c_str(), is_selected)) {
-                    if (selected_profile_key[slot_index] != profiles[i].filename) {
-                        selected_profile_key[slot_index] = profiles[i].filename;
-                        ApplyToSlot(slot_index, profiles[i]);
-                        current_preset[slot_index] = static_cast<int>(profiles[i].controller_preset);
-                        current_team[slot_index] = static_cast<int>(profiles[i].team_preference);
-                        ClearDirty(slot_index);
-                        LOG_INFO("[UI] Selected profile '{}' for slot {} (key-based)", profiles[i].filename, slot_index);
+            // Copy profile keys to local vector to avoid iterator invalidation
+            // if profiles vector is modified during combo iteration
+            std::vector<std::string> profile_keys;
+            profile_keys.reserve(profiles.size());
+            for (const auto& p : profiles) {
+                profile_keys.push_back(p.filename);
+            }
+            for (int i = 0; i < (int)profile_keys.size(); i++) {
+                bool is_selected = (selected_profile_key[slot_index] == profile_keys[i]);
+                if (ImGui::Selectable(profile_keys[i].c_str(), is_selected)) {
+                    if (selected_profile_key[slot_index] != profile_keys[i]) {
+                        // Use safe lookup by key instead of direct vector access
+                        auto* prof = GetProfileByKey(profile_keys[i]);
+                        if (prof) {
+                            selected_profile_key[slot_index] = prof->filename;
+                            ApplyToSlot(slot_index, *prof);
+                            current_preset[slot_index] = static_cast<int>(prof->controller_preset);
+                            current_team[slot_index] = static_cast<int>(prof->team_preference);
+                            ClearDirty(slot_index);
+                            LOG_INFO("[UI] Selected profile '{}' for slot {} (key-based)", prof->filename, slot_index);
+                        }
                     }
                 }
                 if (is_selected) {
@@ -1915,8 +2015,8 @@ namespace MCC::Splitscreen {
 
             // Button Layout
             const char* preset_names[] = {
-                "Default", "Bumper Jumper", "Fishstick", "Recon",
-                "Universal Reclaimer", "Universal Zoom & Shoot", "Custom"
+                "Universal Default (Recon)", "Universal Reclaimer", "Universal Zoom & Shoot",
+                "Universal Bump & Jump", "Universal Green Thumbs", "Universal Infinite", "Custom"
             };
             ImGui::PushItemWidth(180);
             if (ImGui::Combo("Button Layout", &current_preset[slot_index], preset_names, IM_ARRAYSIZE(preset_names))) {
@@ -2299,18 +2399,70 @@ namespace MCC::Splitscreen {
         if (ImGui::CollapsingHeader("Advanced Settings")) {
             ImGui::Indent();
 
-            // Sensitivity sliders
-            ImGui::Text("Look Sensitivity:");
+            // Controller sensitivity sliders
+            ImGui::Text("Controller Sensitivity:");
+            {
+                int v = p_slot->profile.VerticalLookSensitivity;
+                if (ImGui::SliderInt("Vertical Sensitivity", &v, 1, 10)) {
+                    p_slot->profile.VerticalLookSensitivity = (uint8_t)v;
+                    auto p_engine = GameEngine();
+                    if (MCC::IsInGame() && p_engine) {
+                        p_engine->load_setting();
+                    }
+                    MarkDirty(slot_index);
+                }
+            }
+            {
+                int v = p_slot->profile.HorizontalLookSensitivity;
+                if (ImGui::SliderInt("Horizontal Sensitivity", &v, 1, 10)) {
+                    p_slot->profile.HorizontalLookSensitivity = (uint8_t)v;
+                    auto p_engine = GameEngine();
+                    if (MCC::IsInGame() && p_engine) {
+                        p_engine->load_setting();
+                    }
+                    MarkDirty(slot_index);
+                }
+            }
+            {
+                int v = p_slot->profile.LookAcceleration;
+                if (ImGui::SliderInt("Look Acceleration", &v, 1, 5)) {
+                    p_slot->profile.LookAcceleration = (uint8_t)v;
+                    auto p_engine = GameEngine();
+                    if (MCC::IsInGame() && p_engine) {
+                        p_engine->load_setting();
+                    }
+                    MarkDirty(slot_index);
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Deadzones & Multipliers:");
             if (ImGui::SliderFloat("Axial Deadzone", &p_slot->profile.LookAxialDeadZone, 0.0f, 1.0f)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
                 MarkDirty(slot_index);
             }
             if (ImGui::SliderFloat("Radial Deadzone", &p_slot->profile.LookRadialDeadZone, 0.0f, 1.0f)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
                 MarkDirty(slot_index);
             }
             if (ImGui::SliderFloat("Zoom Sensitivity", &p_slot->profile.ZoomLookSensitivityMultiplier, 0.0f, 2.0f)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
                 MarkDirty(slot_index);
             }
             if (ImGui::SliderFloat("Vehicle Sensitivity", &p_slot->profile.VehicleLookSensitivityMultiplier, 0.0f, 2.0f)) {
+                auto p_engine = GameEngine();
+                if (MCC::IsInGame() && p_engine) {
+                    p_engine->load_setting();
+                }
                 MarkDirty(slot_index);
             }
 

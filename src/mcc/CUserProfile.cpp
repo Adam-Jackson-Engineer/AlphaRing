@@ -104,9 +104,9 @@ void CUserProfile::ImGuiContext() {
     }
 
     result |= ImGui::Checkbox("OnlineMedalFlasher", &OnlineMedalFlasher);
-    result |= ImGui::Checkbox("VerticalLookSensitivity", &VerticalLookSensitivity);
-    result |= ImGui::Checkbox("HorizontalLookSensitivity", &HorizontalLookSensitivity);
-    result |= ImGui::Checkbox("LookAcceleration", &LookAcceleration);
+    { int v = VerticalLookSensitivity; if (ImGui::SliderInt("VerticalLookSensitivity", &v, 1, 10)) { VerticalLookSensitivity = (uint8_t)v; result = true; } }
+    { int v = HorizontalLookSensitivity; if (ImGui::SliderInt("HorizontalLookSensitivity", &v, 1, 10)) { HorizontalLookSensitivity = (uint8_t)v; result = true; } }
+    { int v = LookAcceleration; if (ImGui::SliderInt("LookAcceleration", &v, 1, 5)) { LookAcceleration = (uint8_t)v; result = true; } }
     result |= ImGui::InputFloat("LookAxialDeadZone", &LookAxialDeadZone);
     result |= ImGui::InputFloat("LookRadialDeadZone", &LookRadialDeadZone);
     result |= ImGui::InputFloat("ZoomLookSensitivityMultiplier", &ZoomLookSensitivityMultiplier);
@@ -114,18 +114,18 @@ void CUserProfile::ImGuiContext() {
     result |= ImGui::Checkbox("ButtonPreset", &ButtonPreset);
     result |= ImGui::Checkbox("StickPreset", &StickPreset);
     result |= ImGui::Checkbox("LeftyToggle", &LeftyToggle);
-    result |= ImGui::Checkbox("FlyingCameraTurnSensitivity", &FlyingCameraTurnSensitivity);
-    result |= ImGui::Checkbox("FlyingCameraPanning", &FlyingCameraPanning);
-    result |= ImGui::Checkbox("FlyingCameraSpeed", &FlyingCameraSpeed);
-    result |= ImGui::Checkbox("FlyingCameraThrust", &FlyingCameraThrust);
-    result |= ImGui::Checkbox("TheaterTurnSensitivity", &TheaterTurnSensitivity);
-    result |= ImGui::Checkbox("TheaterPanning", &TheaterPanning);
-    result |= ImGui::Checkbox("TheaterSpeed", &TheaterSpeed);
-    result |= ImGui::Checkbox("TheaterThrust", &TheaterThrust);
-    result |= ImGui::Checkbox("MKTheaterTurnSensitivity", &MKTheaterTurnSensitivity);
-    result |= ImGui::Checkbox("MKTheaterPanning", &MKTheaterPanning);
-    result |= ImGui::Checkbox("MKTheaterSpeed", &MKTheaterSpeed);
-    result |= ImGui::Checkbox("MKTheaterThrust", &MKTheaterThrust);
+    { int v = FlyingCameraTurnSensitivity; if (ImGui::SliderInt("FlyingCameraTurnSensitivity", &v, 1, 10)) { FlyingCameraTurnSensitivity = (uint8_t)v; result = true; } }
+    { int v = FlyingCameraPanning; if (ImGui::SliderInt("FlyingCameraPanning", &v, 1, 10)) { FlyingCameraPanning = (uint8_t)v; result = true; } }
+    { int v = FlyingCameraSpeed; if (ImGui::SliderInt("FlyingCameraSpeed", &v, 1, 10)) { FlyingCameraSpeed = (uint8_t)v; result = true; } }
+    { int v = FlyingCameraThrust; if (ImGui::SliderInt("FlyingCameraThrust", &v, 1, 10)) { FlyingCameraThrust = (uint8_t)v; result = true; } }
+    { int v = TheaterTurnSensitivity; if (ImGui::SliderInt("TheaterTurnSensitivity", &v, 1, 10)) { TheaterTurnSensitivity = (uint8_t)v; result = true; } }
+    { int v = TheaterPanning; if (ImGui::SliderInt("TheaterPanning", &v, 1, 10)) { TheaterPanning = (uint8_t)v; result = true; } }
+    { int v = TheaterSpeed; if (ImGui::SliderInt("TheaterSpeed", &v, 1, 10)) { TheaterSpeed = (uint8_t)v; result = true; } }
+    { int v = TheaterThrust; if (ImGui::SliderInt("TheaterThrust", &v, 1, 10)) { TheaterThrust = (uint8_t)v; result = true; } }
+    { int v = MKTheaterTurnSensitivity; if (ImGui::SliderInt("MKTheaterTurnSensitivity", &v, 1, 10)) { MKTheaterTurnSensitivity = (uint8_t)v; result = true; } }
+    { int v = MKTheaterPanning; if (ImGui::SliderInt("MKTheaterPanning", &v, 1, 10)) { MKTheaterPanning = (uint8_t)v; result = true; } }
+    { int v = MKTheaterSpeed; if (ImGui::SliderInt("MKTheaterSpeed", &v, 1, 10)) { MKTheaterSpeed = (uint8_t)v; result = true; } }
+    { int v = MKTheaterThrust; if (ImGui::SliderInt("MKTheaterThrust", &v, 1, 10)) { MKTheaterThrust = (uint8_t)v; result = true; } }
     result |= ImGui::Checkbox("SwapTriggersAndBumpers", &SwapTriggersAndBumpers);
     result |= ImGui::Checkbox("UseModernAimControl", &UseModernAimControl);
     result |= ImGui::Checkbox("UseDoublePressJumpToJetpack", &UseDoublePressJumpToJetpack);

@@ -12,6 +12,7 @@ Group ID and password (server `halo.dronedude.app`).
 - Profiles, armor, controls and teams come from the group on halo.dronedude.app; phone edits apply live.
 - One PC connection shared by every MCC window on that PC (works with Nucleus Co-op), with failover.
 - Players can pick their screen in the overlay or tap "That's me" on their phone.
+- Local backups of the group's profiles on each PC (Ring Chief window → Local backups): play offline from any of the last 20.
 
 ### Known limits
 - Kills/deaths aren't read from the game yet; the host records scores on the website.

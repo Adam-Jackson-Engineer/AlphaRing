@@ -17,7 +17,7 @@ namespace RingChief {
         std::string display;      // normalised form for the UI, e.g. "halo.dronedude.app"
     };
 
-    // Accepts "halo.dronedude.app", "https://host", "http://192.168.4.98:3004", "host:3004/base".
+    // Accepts "halo.dronedude.app", "https://host", "http://192.168.1.50:3004", "host:3004/base".
     // A bare host means https on 443.
     bool ParseServer(const std::string& input, ServerAddr& out, std::string& err);
 

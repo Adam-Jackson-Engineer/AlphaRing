@@ -1,0 +1,59 @@
+name: Ring Chief build
+
+on:
+  push:
+    branches: [ringchief]
+    tags: ['ringchief-v*']
+  pull_request:
+    branches: [ringchief]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish releases on tags
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=release
+
+      - name: Build
+        run: cmake --build build --config Release -- /m /v:minimal
+
+      - name: Unit tests
+        run: build\Release\ringchief_tests.exe
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' -replace '^ringchief-', '' } else { 'dev-' + '${{ github.sha }}'.Substring(0, 7) }
+          $pkg = "dist\AlphaRing-RingChief-$name"
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item build\Release\WTSAPI32.dll, INSTALL.md, tools\install-ringchief.ps1, LICENCE.txt $pkg
+          Compress-Archive -Path "$pkg\*" -DestinationPath "$pkg.zip"
+          Copy-Item build\Release\WTSAPI32.dll dist\WTSAPI32.dll
+          Get-ChildItem dist -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS.txt
+          Get-Content dist\SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpharing-ringchief
+          path: |
+            dist/*.zip
+            dist/WTSAPI32.dll
+            dist/SHA256SUMS.txt
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ring Chief ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            dist/*.zip
+            dist/WTSAPI32.dll
+            dist/SHA256SUMS.txt

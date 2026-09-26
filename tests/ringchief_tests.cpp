@@ -105,10 +105,10 @@ TEST_CASE("ParseServer accepts the forms people type") {
     CHECK(a.host == L"halo.dronedude.app");
     CHECK(a.display == "halo.dronedude.app");
 
-    REQUIRE(ParseServer("http://192.168.4.98:3004", a, err));
+    REQUIRE(ParseServer("http://192.168.1.50:3004", a, err));
     CHECK_FALSE(a.secure);
     CHECK(a.port == 3004);
-    CHECK(a.display == "http://192.168.4.98:3004");
+    CHECK(a.display == "http://192.168.1.50:3004");
 
     REQUIRE(ParseServer("example.com:8443/ringchief", a, err));
     CHECK(a.secure);

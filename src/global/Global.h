@@ -21,6 +21,14 @@ namespace AlphaRing::Global {
         bool show_imgui_mouse = true;
         bool pause_game_on_menu_shown = true;
         bool disable_input_on_menu_shown = true;
+        // Hide focus loss from MCC (stops the pause blur when several MCC windows share a
+        // screen). Turned on automatically for Nucleus instances; off for a single window.
+        bool keep_focus = false;
+        // Left-click diagnostics (Advanced settings): seen by the window / passed to MCC /
+        // kept by the overlay because the pointer was over an overlay window.
+        int clicks_seen = 0;
+        int clicks_to_game = 0;
+        int clicks_to_overlay = 0;
     };
 
     namespace Halo3 {

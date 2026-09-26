@@ -265,6 +265,51 @@ namespace RingChief::Game {
             ImGui::TextDisabled("Players can also tap \"That's me\" on the group page.");
         }
 
+        // Players and input for this MCC window.
+        void ScreenSection() {
+            auto* ss = AlphaRing::Global::MCC::Splitscreen();
+            int players = ss->b_override ? std::clamp(ss->player_count, 1, 4) : 1;
+            ImGui::Text("Players on this screen");
+            for (int n = 1; n <= 4; n++) {
+                char label[8];
+                snprintf(label, sizeof(label), "%d##players", n);
+                if (n > 1) ImGui::SameLine();
+                if (ImGui::RadioButton(label, players == n) && players != n) {
+                    if (n == 1) {
+                        ss->b_override = false;          // plain MCC: keyboard, mouse and controller all work
+                    } else {
+                        ss->player_count = n;
+                        ss->b_override = true;           // AlphaRing split-screen
+                        ss->b_override_profile = true;
+                        ss->b_use_player0_profile = false;
+                    }
+                    g_session->SlotsChanged();
+                }
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("With Nucleus, join the LAN lobby first, then add players here.");
+
+            ImGui::Text("Player 1 uses");
+            ImGui::SameLine();
+            if (players == 1) {
+                ImGui::TextDisabled("keyboard, mouse or controller");
+            } else {
+                if (ImGui::RadioButton("Controller##p1", !ss->b_player0_use_km)) ss->b_player0_use_km = false;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Keyboard & mouse##p1", ss->b_player0_use_km)) ss->b_player0_use_km = true;
+            }
+        }
+
+        void TroubleshootingSection() {
+            if (!ImGui::CollapsingHeader("Troubleshooting")) return;
+            auto* g = AlphaRing::Global::Global();
+            ImGui::Text("Left clicks: %d seen, %d to the game, %d kept by this overlay",
+                        g->clicks_seen, g->clicks_to_game, g->clicks_to_overlay);
+            ImGui::TextDisabled("Clicks on an overlay window stay here; everywhere else goes to MCC.");
+            ImGui::Checkbox("Hide focus changes from MCC (multi-window blur fix)", &g->keep_focus);
+            ImGui::TextDisabled("On automatically with Nucleus. Press Insert or F4 to hide the overlay.");
+        }
+
         // Local copies of the group's profiles on this PC (for offline play / if the site is down).
         void BackupsSection() {
             auto* s = g_session.get();
@@ -307,13 +352,26 @@ namespace RingChief::Game {
             filled = true;
         }
 
+        auto* g = AlphaRing::Global::Global();
+        if (g->pause_game_on_menu_shown || g->disable_input_on_menu_shown)
+        {
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.8f, 0.3f, 1));
+            ImGui::TextWrapped("The game ignores input while this overlay is open. Press Insert, F4 or Back+Start to hide it.");
+            ImGui::PopStyleColor();
+            ImGui::PopTextWrapPos();
+        }
+
         auto state = s->GetState();
         if (state == Session::State::Follower) {
             ImGui::TextWrapped("This screen is connected through the main game window on this PC.");
             if (!s->GroupName().empty()) ImGui::Text("Group: %s", s->GroupName().c_str());
             if (!s->NightName().empty()) ImGui::Text("Tonight: %s", s->NightName().c_str());
             ImGui::Separator();
+            ScreenSection();
+            ImGui::Separator();
             SlotPickers();
+            TroubleshootingSection();
         } else if (state == Session::State::LoggedOut || state == Session::State::Working) {
             ImGui::TextWrapped("Join your group to load everyone's Spartans.");
             ImGui::Spacing();
@@ -335,6 +393,7 @@ namespace RingChief::Game {
             ImGui::Spacing();
             ImGui::TextDisabled("Players build their Spartans on the website.");
             BackupsSection();
+            TroubleshootingSection();
         } else {
             const char* label = state == Session::State::Online ? "Online" : state == Session::State::Offline ? "Offline (saved group)" : "Reconnecting...";
             ImGui::Text("%s  -  %s", label, s->GroupName().c_str());
@@ -342,9 +401,12 @@ namespace RingChief::Game {
             if (s->FollowerCount()) ImGui::Text("Other screens on this PC: %zu", s->FollowerCount());
             if (!s->Error().empty() && state != Session::State::Online) ImGui::TextColored(ImVec4(0.95f, 0.8f, 0.3f, 1), "%s", s->Error().c_str());
             ImGui::Separator();
+            ScreenSection();
+            ImGui::Separator();
             SlotPickers();
             ImGui::Separator();
             BackupsSection();
+            TroubleshootingSection();
             if (ImGui::Button(state == Session::State::Offline ? "Sign in" : "Log out")) { s->Logout(); filled = false; }
         }
         ImGui::End();

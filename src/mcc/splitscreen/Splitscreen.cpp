@@ -47,6 +47,8 @@ namespace MCC::Splitscreen {
             p_setting->player_count = inst_cfg.player_count;
             p_setting->b_override = false;
             p_setting->b_override_profile = true;
+            // Several MCC windows on one screen: hide focus loss so the others don't blur.
+            AlphaRing::Global::Global()->keep_focus = true;
         }
 
         // Ring Chief: group login, profiles from halo.dronedude.app, live updates.
@@ -187,13 +189,13 @@ namespace MCC::Splitscreen {
     }
 
     void ImGuiContext() {
-        static bool show_splitscreen = true;
-        static bool show_session_details;
+        static bool show_splitscreen = false;      // "Advanced settings"
+        static bool show_session_details = true;
         static bool show_ringchief = true;
         if (RingChief::Game::WantsAttention()) show_ringchief = true;
 
         if (ImGui::BeginMainMenuBar()) {
-            ImGui::MenuItem("Splitscreen", nullptr, &show_splitscreen);
+            ImGui::MenuItem("Advanced settings", nullptr, &show_splitscreen);
             ImGui::MenuItem("Session Details", nullptr, &show_session_details);
 
             // LAN Reminder indicator (always visible in menu bar)
@@ -223,7 +225,7 @@ namespace MCC::Splitscreen {
         if (show_splitscreen) {
             ImGui::SetNextWindowPos(ImVec2(0, 25), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize(ImVec2(450, 400), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Splitscreen", &show_splitscreen, ImGuiWindowFlags_MenuBar))
+            if (ImGui::Begin("Advanced settings", &show_splitscreen, ImGuiWindowFlags_MenuBar))
                 RealContext();
             ImGui::End();
         }
@@ -308,9 +310,11 @@ namespace MCC::Splitscreen {
                 // Quick load for each player slot
                 // Copy profile filenames to local vector to avoid iterator invalidation
                 std::vector<std::string> profile_keys;
+                std::vector<std::string> profile_labels;
                 profile_keys.reserve(ProfileManager::profiles.size());
                 for (const auto& p : ProfileManager::profiles) {
                     profile_keys.push_back(p.filename);
+                    profile_labels.push_back(ProfileManager::DisplayLabel(p.filename) + "##" + p.filename);
                 }
 
                 for (int i = 0; i < p_setting->player_count; i++) {
@@ -319,7 +323,7 @@ namespace MCC::Splitscreen {
                     if (ImGui::BeginMenu(label)) {
                         for (int j = 0; j < (int)profile_keys.size(); j++) {
                             bool is_selected = (ProfileManager::selected_profile_key[i] == profile_keys[j]);
-                            if (ImGui::MenuItem(profile_keys[j].c_str(),
+                            if (ImGui::MenuItem(profile_labels[j].c_str(),
                                                 nullptr,
                                                 is_selected)) {
                                 // Safely get profile by key (returns nullptr if not found)
@@ -527,9 +531,9 @@ namespace MCC::Splitscreen {
                         // Show dirty indicator if modified
                         if (ProfileManager::IsSlotDirty(i)) {
                             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s *",
-                                sel_prof->filename.c_str());
+                                ProfileManager::DisplayLabel(sel_prof->filename).c_str());
                         } else {
-                            ImGui::Text("%s", sel_prof->filename.c_str());
+                            ImGui::Text("%s", ProfileManager::DisplayLabel(sel_prof->filename).c_str());
                         }
                     } else {
                         ImGui::TextDisabled("(no profile)");

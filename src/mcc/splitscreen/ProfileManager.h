@@ -104,6 +104,8 @@ namespace MCC::Splitscreen {
         static int FindProfileIndexByKey(const std::string& key);
         // Get profile by key (returns nullptr if not found)
         static PersistentProfile* GetProfileByKey(const std::string& key);
+        // "Gamertag  [TAG]" for UI lists (falls back to the key).
+        static std::string DisplayLabel(const std::string& key);
 
         // Sync UI state arrays from loaded profile (call after Refresh/Load)
         static void SyncUIStateFromProfile(int slot_index);

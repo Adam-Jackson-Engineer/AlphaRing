@@ -19,22 +19,25 @@ namespace AlphaRing::Render::Window {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
             return true;
 
-        // Block activation/deactivation messages to prevent MCC's pause blur
-        // This prevents the "weirdly shaded" screen when clicking other windows
+        auto* g = AlphaRing::Global::Global();
+
+        // Optionally hide focus loss from MCC (prevents the pause blur when several MCC
+        // windows share a screen). Only for Nucleus instances by default: for a single
+        // window it can confuse MCC's own mouse handling.
+        if (g->keep_focus) {
+            switch (uMsg) {
+                case WM_ACTIVATE:
+                    if (LOWORD(wParam) == WA_INACTIVE) return 0;
+                    break;
+                case WM_ACTIVATEAPP:
+                    if (wParam == FALSE) return 0;
+                    break;
+                case WM_KILLFOCUS:
+                    return 0;
+            }
+        }
+
         switch (uMsg) {
-            case WM_ACTIVATE:
-                // Block deactivation (WA_INACTIVE = 0), allow activation
-                if (LOWORD(wParam) == WA_INACTIVE)
-                    return 0;
-                break;
-            case WM_ACTIVATEAPP:
-                // Block app deactivation (wParam = FALSE)
-                if (wParam == FALSE)
-                    return 0;
-                break;
-            case WM_KILLFOCUS:
-                // Block focus loss entirely
-                return 0;
             case WM_KEYDOWN: {
                 switch (wParam) {
                     case VK_F4:
@@ -46,11 +49,18 @@ namespace AlphaRing::Render::Window {
         }
 
         auto& io = ImGui::GetIO();
+        bool click = uMsg == WM_LBUTTONDOWN;
+        if (click) g->clicks_seen++;
 
-        if (io.WantCaptureMouse)
-            if(AlphaRing::Global::Global()->show_imgui)
-                return true;
+        // The overlay keeps mouse input only while the pointer is over one of its windows.
+        if (io.WantCaptureMouse && g->show_imgui && uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST) {
+            if (click) g->clicks_to_overlay++;
+            return true;
+        }
+        if (io.WantCaptureKeyboard && g->show_imgui && (uMsg == WM_KEYDOWN || uMsg == WM_KEYUP || uMsg == WM_CHAR))
+            return true;
 
+        if (click) g->clicks_to_game++;
         return CallWindowProc(oldWndProc, hWnd, uMsg, wParam, lParam);
     }
 

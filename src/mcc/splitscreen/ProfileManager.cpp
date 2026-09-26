@@ -125,6 +125,15 @@ namespace MCC::Splitscreen {
         return -1;  // Not found
     }
 
+    std::string ProfileManager::DisplayLabel(const std::string& key) {
+        const PersistentProfile* p = GetProfileByKey(key);
+        if (!p) return key;
+        std::string name = wstring_to_utf8(p->display_name);
+        std::wstring tag(p->service_tag, wcsnlen(p->service_tag, 4));
+        if (!tag.empty()) name += "  [" + wstring_to_utf8(tag) + "]";
+        return name;
+    }
+
     PersistentProfile* ProfileManager::GetProfileByKey(const std::string& key) {
         int idx = FindProfileIndexByKey(key);
         if (idx >= 0 && idx < (int)profiles.size()) {
@@ -976,9 +985,10 @@ namespace MCC::Splitscreen {
 
         // ========== TOP SECTION: Profile dropdown (left) + Input dropdown (right) ==========
         // Profile dropdown - uses key-based selection (stable across Refresh)
-        const char* current_profile = !selected_profile_key[slot_index].empty()
-            ? selected_profile_key[slot_index].c_str()
-            : "-- None --";
+        std::string current_label = !selected_profile_key[slot_index].empty()
+            ? DisplayLabel(selected_profile_key[slot_index])
+            : std::string("-- None --");
+        const char* current_profile = current_label.c_str();
 
         ImGui::PushItemWidth(180);
         if (ImGui::BeginCombo("Profile", current_profile)) {
@@ -989,13 +999,15 @@ namespace MCC::Splitscreen {
             // Copy profile keys to local vector to avoid iterator invalidation
             // if profiles vector is modified during combo iteration
             std::vector<std::string> profile_keys;
+            std::vector<std::string> profile_labels;
             profile_keys.reserve(profiles.size());
             for (const auto& p : profiles) {
                 profile_keys.push_back(p.filename);
+                profile_labels.push_back(DisplayLabel(p.filename) + "##" + p.filename);
             }
             for (int i = 0; i < (int)profile_keys.size(); i++) {
                 bool is_selected = (selected_profile_key[slot_index] == profile_keys[i]);
-                if (ImGui::Selectable(profile_keys[i].c_str(), is_selected)) {
+                if (ImGui::Selectable(profile_labels[i].c_str(), is_selected)) {
                     if (selected_profile_key[slot_index] != profile_keys[i]) {
                         // Use safe lookup by key instead of direct vector access
                         auto* prof = GetProfileByKey(profile_keys[i]);

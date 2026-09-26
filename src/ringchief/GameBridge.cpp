@@ -264,6 +264,32 @@ namespace RingChief::Game {
             }
             ImGui::TextDisabled("Players can also tap \"That's me\" on the group page.");
         }
+
+        // Local copies of the group's profiles on this PC (for offline play / if the site is down).
+        void BackupsSection() {
+            auto* s = g_session.get();
+            if (!ImGui::CollapsingHeader("Local backups")) return;
+            auto list = s->Backups();
+            if (list.empty()) {
+                ImGui::TextDisabled("No backups on this PC yet. One is made after the first sign-in.");
+            } else {
+                ImGui::Text("%zu backup(s), newest %s", list.size(), list.front().saved_at.substr(0, 16).c_str());
+            }
+            if (s->GetState() == Session::State::Online || s->GetState() == Session::State::Offline || s->GetState() == Session::State::Reconnecting) {
+                if (ImGui::Button("Back up now")) s->BackupNow();
+                ImGui::SameLine();
+                ImGui::TextDisabled("(automatic after changes, at most once a minute)");
+            }
+            int shown = 0;
+            for (const auto& b : list) {
+                if (shown++ >= 8) break;
+                ImGui::PushID(b.path.c_str());
+                ImGui::Text("%s  -  %zu players", b.saved_at.substr(0, 16).c_str(), b.profile_count);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Play from this")) s->PlayFromBackup(b.path);
+                ImGui::PopID();
+            }
+        }
     }
 
     void DrawWindow(bool* open) {
@@ -308,6 +334,7 @@ namespace RingChief::Game {
             if (!s->Error().empty()) ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1), "%s", s->Error().c_str());
             ImGui::Spacing();
             ImGui::TextDisabled("Players build their Spartans on the website.");
+            BackupsSection();
         } else {
             const char* label = state == Session::State::Online ? "Online" : state == Session::State::Offline ? "Offline (saved group)" : "Reconnecting...";
             ImGui::Text("%s  -  %s", label, s->GroupName().c_str());
@@ -317,6 +344,7 @@ namespace RingChief::Game {
             ImGui::Separator();
             SlotPickers();
             ImGui::Separator();
+            BackupsSection();
             if (ImGui::Button(state == Session::State::Offline ? "Sign in" : "Log out")) { s->Logout(); filled = false; }
         }
         ImGui::End();

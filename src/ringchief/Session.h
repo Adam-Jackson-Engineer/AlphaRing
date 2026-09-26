@@ -20,6 +20,7 @@
 #include "Http.h"
 #include "LocalLink.h"
 #include "ProfileV5.h"
+#include "Storage.h"
 
 namespace RingChief {
     using json = nlohmann::json;
@@ -48,7 +49,9 @@ namespace RingChief {
         struct Options {
             uint16_t local_port = 42069;
             std::string client = "AlphaRing";
-            bool use_storage = true;           // false in tests: no %ProgramData% reads/writes
+            bool use_storage = true;           // false: no disk reads/writes at all
+            std::string storage_dir;           // tests: use this folder instead of %ProgramData%\RingChief
+            double backup_interval_s = 60.0;   // at most one backup per minute for live edits
             double ping_interval_s = 20.0;
             double stats_interval_s = 0.25;
         };
@@ -68,8 +71,14 @@ namespace RingChief {
 
         // UI actions (hub only)
         void Login(const std::string& server, const std::string& group_id, const std::string& password, bool remember);
-        void PlayOffline();
+        void PlayOffline();                              // latest local copy of the group
+        bool PlayFromBackup(const std::string& path);    // a specific local backup
         void Logout();
+
+        // Local backups of the group's profiles (hub only; followers use the hub's).
+        bool BackupNow();                                // false if nothing changed / no group
+        std::vector<Storage::BackupInfo> Backups() const;
+        const std::string& LastBackupAt() const { return last_backup_at_; }
 
         // Game events
         void OnMatchEnd(const json& match);   // {"game","mode","map","matchEpoch","players":[...],"winner"}
@@ -98,6 +107,8 @@ namespace RingChief {
         void PollLink(double now_s);
         void HandleFrame(const json& msg, bool from_server);
         void ApplyWelcome(const json& welcome);
+        std::string GroupKeyForStorage() const;
+        void SaveLocalCopy(bool force_backup);
         void ApplyTeamsFrom(const json& teams);
         void SendUp(const json& msg);           // hub: to server; follower: to hub
         void SendHello();
@@ -124,6 +135,10 @@ namespace RingChief {
         std::vector<V5Profile> profiles_;
         json welcome_;               // last welcome (kept current with profile updates)
         json night_;
+        std::string group_id_;       // from the server's welcome ("wargames2027")
+        bool backup_dirty_ = false;
+        double next_backup_ = 0;
+        std::string last_backup_at_;
 
         // local link
         std::map<int, json> follower_instances_;   // hub: peer -> instances array

@@ -36,11 +36,14 @@ namespace RingChief {
         }
     }
 
-    Session::Session(GameAdapter& game, Options options) : game_(game), opt_(std::move(options)) {}
+    Session::Session(GameAdapter& game, Options options) : game_(game), opt_(std::move(options)) {
+        if (!opt_.storage_dir.empty()) Storage::SetDirForTests(opt_.storage_dir);
+    }
 
     Session::~Session() { Shutdown(); }
 
     void Session::Shutdown() {
+        if (backup_dirty_) SaveLocalCopy(true);
         StopWorker();
         link_.Stop();
     }
@@ -88,7 +91,7 @@ namespace RingChief {
             error_.clear();
             if (opt_.use_storage && profiles_.empty()) {
                 json cached;
-                if (Storage::LoadGroupCache(cached)) ApplyWelcome(cached);
+                if (Storage::LoadGroupCache(group_input_, cached)) ApplyWelcome(cached);
             }
             state_ = State::Working;
             StartWorker(server_, token_, "");
@@ -116,14 +119,57 @@ namespace RingChief {
     void Session::PlayOffline() {
         StopWorker();
         json cached;
-        if (opt_.use_storage && Storage::LoadGroupCache(cached)) {
+        if (opt_.use_storage && Storage::LoadGroupCache(group_input_, cached)) {
             ApplyWelcome(cached);
             error_.clear();
         } else if (profiles_.empty()) {
-            error_ = "No saved group on this PC yet. Profiles appear after the first online login.";
+            error_ = "No saved copy of this group on this PC yet. Sign in online once first.";
         }
         state_ = State::Offline;
         if (link_.GetRole() == LocalLink::Role::Hub && welcome_.is_object()) link_.Broadcast(welcome_.dump());
+    }
+
+    bool Session::PlayFromBackup(const std::string& path) {
+        json backup;
+        if (!Storage::LoadBackup(path, backup)) { error_ = "That backup can't be read."; return false; }
+        StopWorker();
+        ApplyWelcome(backup);
+        error_.clear();
+        state_ = State::Offline;
+        if (link_.GetRole() == LocalLink::Role::Hub) link_.Broadcast(welcome_.dump());
+        return true;
+    }
+
+    std::string Session::GroupKeyForStorage() const {
+        return !group_id_.empty() ? group_id_ : group_input_;
+    }
+
+    void Session::SaveLocalCopy(bool force_backup) {
+        backup_dirty_ = false;
+        if (!opt_.use_storage || !welcome_.is_object() || link_.GetRole() == LocalLink::Role::Follower) return;
+        std::string key = GroupKeyForStorage();
+        if (key.empty()) return;
+        Storage::SaveGroupCache(key, welcome_);
+        std::string written = Storage::SaveBackup(key, welcome_);
+        if (!written.empty() || force_backup) {
+            auto list = Storage::ListBackups(key);
+            if (!list.empty()) last_backup_at_ = list.front().saved_at;
+        }
+    }
+
+    bool Session::BackupNow() {
+        if (!opt_.use_storage || !welcome_.is_object() || GroupKeyForStorage().empty()) return false;
+        Storage::SaveGroupCache(GroupKeyForStorage(), welcome_);
+        std::string written = Storage::SaveBackup(GroupKeyForStorage(), welcome_);
+        auto list = Storage::ListBackups(GroupKeyForStorage());
+        if (!list.empty()) last_backup_at_ = list.front().saved_at;
+        backup_dirty_ = false;
+        return !written.empty();
+    }
+
+    std::vector<Storage::BackupInfo> Session::Backups() const {
+        if (!opt_.use_storage || GroupKeyForStorage().empty()) return {};
+        return Storage::ListBackups(GroupKeyForStorage());
     }
 
     void Session::Logout() {
@@ -205,6 +251,11 @@ namespace RingChief {
         if (link_.GetRole() == LocalLink::Role::None && now_s >= next_role_try_) BecomeRole(now_s);
         PollLink(now_s);
         Drain(now_s);
+
+        if (backup_dirty_ && now_s >= next_backup_) {
+            next_backup_ = now_s + opt_.backup_interval_s;
+            SaveLocalCopy(false);
+        }
 
         bool connected = link_.GetRole() == LocalLink::Role::Follower ||
                          (link_.GetRole() == LocalLink::Role::Hub && state_ == State::Online);
@@ -371,7 +422,7 @@ namespace RingChief {
         std::string type = msg.value("type", "");
         if (type == "welcome") {
             ApplyWelcome(msg);
-            if (opt_.use_storage && from_server) Storage::SaveGroupCache(msg);
+            if (from_server) SaveLocalCopy(false);
         } else if (type == "profile" && msg.contains("profile")) {
             V5Profile p;
             std::string err;
@@ -385,14 +436,21 @@ namespace RingChief {
                 if (!replaced) arr.push_back(msg["profile"]);
             }
             game_.UpdateProfile(p);
+            if (from_server) backup_dirty_ = true;
         } else if (type == "profileRemoved") {
             std::string id = msg.value("profileId", "");
             profiles_.erase(std::remove_if(profiles_.begin(), profiles_.end(), [&](const V5Profile& x) { return x.id == id; }), profiles_.end());
+            if (welcome_.is_object() && welcome_.contains("profiles")) {
+                auto& arr = welcome_["profiles"];
+                arr.erase(std::remove_if(arr.begin(), arr.end(), [&](const json& x) { return x.value("id", "") == id; }), arr.end());
+            }
             game_.RemoveProfile(id);
+            if (from_server) backup_dirty_ = true;
         } else if (type == "night") {
             night_ = msg.contains("night") ? msg["night"] : json();
             if (welcome_.is_object()) welcome_["night"] = night_;
             if (night_.is_object() && night_.contains("teams")) ApplyTeamsFrom(night_["teams"]);
+            if (from_server) backup_dirty_ = true;
         } else if (type == "teams") {
             if (night_.is_object()) night_["teams"] = msg.value("teams", json::object());
             ApplyTeamsFrom(msg.value("teams", json::object()));
@@ -417,7 +475,10 @@ namespace RingChief {
     void Session::ApplyWelcome(const json& welcome) {
         welcome_ = welcome;
         welcome_["type"] = "welcome";
-        if (welcome.contains("group") && welcome["group"].is_object()) group_name_ = welcome["group"].value("name", group_name_);
+        if (welcome.contains("group") && welcome["group"].is_object()) {
+            group_name_ = welcome["group"].value("name", group_name_);
+            group_id_ = welcome["group"].value("id", group_id_);
+        }
         night_ = welcome.contains("night") ? welcome["night"] : json();
         profiles_.clear();
         if (welcome.contains("profiles") && welcome["profiles"].is_array()) {

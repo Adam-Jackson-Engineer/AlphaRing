@@ -84,10 +84,12 @@ option(RINGCHIEF_TESTS "Build the Ring Chief test executable" ON)
 if (RINGCHIEF_TESTS)
     add_executable(ringchief_tests
             tests/main.cpp tests/ringchief_tests.cpp tests/integration_tests.cpp
+            tests/storage_tests.cpp tests/profile_tests.cpp tests/locallink_tests.cpp tests/session_tests.cpp
             src/ringchief/Http.cpp src/ringchief/LocalLink.cpp src/ringchief/ProfileV5.cpp
             src/ringchief/Session.cpp src/ringchief/Storage.cpp src/mcc/CUserProfileJson.cpp)
     target_compile_definitions(ringchief_tests PRIVATE RINGCHIEF_TEST_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures")
     target_link_libraries(ringchief_tests PRIVATE ws2_32 winhttp crypt32 shell32 ole32)
+    target_compile_options(ringchief_tests PRIVATE /utf-8)
     enable_testing()
     add_test(NAME ringchief_tests COMMAND ringchief_tests)
 endif()

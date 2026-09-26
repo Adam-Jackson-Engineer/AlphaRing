@@ -12,7 +12,7 @@ set(LIBRARY_LIST
         minhook imgui lua spdlog tinyxml2
         utils game
         Version
-        ws2_32
+        ws2_32 winhttp crypt32 shell32 ole32
 )
 
 include_directories(${CMAKE_SOURCE_DIR}/src)

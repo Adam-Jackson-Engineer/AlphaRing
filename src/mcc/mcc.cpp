@@ -8,8 +8,6 @@
 #include "mcc/module/Module.h"
 #include "mcc/network/Network.h"
 #include "mcc/splitscreen/Splitscreen.h"
-#include "mcc/display/DisplayBroadcaster.h"
-#include "mcc/server/RingChiefClient.h"
 
 namespace MCC {
     static bool* bIsInGame;
@@ -67,18 +65,6 @@ namespace MCC {
 
         if (!Network::Initialize())
             return false;
-
-        if (!Display::Initialize())
-        {
-            LOG_WARNING("MCC: failed to initialize Display (non-fatal)");
-            // Non-fatal - display is optional
-        }
-
-        if (!Server::Client::Initialize())
-        {
-            LOG_WARNING("MCC: failed to initialize Ring Chief Server client (non-fatal)");
-            // Non-fatal - server connection is optional
-        }
 
         return true;
     }

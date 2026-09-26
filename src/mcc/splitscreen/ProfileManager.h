@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 #include "../CUserProfile.h"
 #include "../CGamepadMapping.h"
 
@@ -78,6 +79,7 @@ namespace MCC::Splitscreen {
         CUserProfile user_profile;      // Full game profile (armor, settings)
         CGamepadMapping gamepad_mapping; // Controller bindings
         CareerStats career_stats;       // Persistent career statistics
+        nlohmann::json v5;              // Ring Chief web profile (null for legacy local profiles)
 
         PersistentProfile();
         void RandomizeAppearance();     // Randomize colors, emblem, armor
@@ -95,7 +97,6 @@ namespace MCC::Splitscreen {
         static bool SaveProfile(const PersistentProfile& profile, const std::string& filename);
         static bool DeleteProfile(const std::string& filename);
         static void ApplyToSlot(int slot_index, const PersistentProfile& profile);
-        static std::string GetProfilesPath();
         static int ComputeRankLevel(int xp);
         static const char* GetRankName(int level);
 
@@ -111,9 +112,8 @@ namespace MCC::Splitscreen {
 
         static void ImGuiProfileSelector(int slot_index);
 
-        // Auto-load profile from instance config (called after LoadAllProfiles)
-        // Only loads once per session, subsequent calls are no-ops
-        static void TryAutoLoadFromConfig();
+        // Set a slot's team: immediately when in a match, otherwise when the next match starts.
+        static void SetSlotTeam(int slot_index, int team);
 
         // Apply pending team preferences when game starts
         static void ApplyPendingTeams();
@@ -140,13 +140,9 @@ namespace MCC::Splitscreen {
         static void OnMatchStart();
         static void OnMatchEnd();
         static void UpdateLiveStats(int slot_index, int kills, int deaths, int assists, int score);
-        static void WriteMatchHistory();
-        static std::string GetHistoryPath();
         static int GetMatchEpoch() { return s_match_start_epoch; }
 
     private:
-        static bool EnsureProfilesDirectory();
-        static bool s_auto_load_attempted;
         static int s_match_start_epoch;
     };
 

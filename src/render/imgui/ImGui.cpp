@@ -14,8 +14,7 @@
 
 #include "mcc/mcc.h"
 #include "mcc/CGameGlobal.h"
-#include "mcc/display/DisplayBroadcaster.h"
-#include "mcc/server/RingChiefClient.h"
+#include "mcc/splitscreen/Splitscreen.h"
 
 static ICContext* pages[7] {
         nullptr,
@@ -72,10 +71,8 @@ namespace AlphaRing::Render::ImGui {
 
         AlphaRing::Input::Update();
 
-        // Always update server communication and stats broadcast, regardless of UI visibility
-        // This ensures Ring Chief Display stays connected even when UI is hidden (F4)
-        MCC::Display::BroadcastStats();
-        MCC::Server::Client::Update();
+        // Every frame, overlay or not: team/armor timing and the Ring Chief connection.
+        MCC::Splitscreen::Tick();
 
         if (!AlphaRing::Global::Global()->show_imgui || !AlphaRing::Global::Global()->show_imgui_mouse)
             ::ImGui::SetMouseCursor(ImGuiMouseCursor_None);

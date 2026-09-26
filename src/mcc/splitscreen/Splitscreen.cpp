@@ -11,7 +11,7 @@
 
 #include "../CGameManager.h"
 #include "../InstanceConfig.h"
-#include "../server/RingChiefClient.h"
+#include "ringchief/GameBridge.h"
 
 namespace MCC::Splitscreen {
     DefDetourFunction(__int64, __fastcall, get_index_by_xuid, void* a1, __int64 xuid) {
@@ -35,80 +35,22 @@ namespace MCC::Splitscreen {
 
         if (!result) { LOG_ERROR("MCC:Splitscreen: failed to hook"); return false; }
 
-        // Load instance config from Nucleus (if present)
+        // Optional settings from the Nucleus handler (player count, login pre-fill).
         AlphaRing::Config::LoadInstanceConfig();
-
-        // Load persistent profiles from disk
-        ProfileManager::LoadAllProfiles();
-
-        // Reset any stale team state from previous session
         ProfileManager::ResetTeamState();
-        LOG_INFO("[RINGCHIEF] Splitscreen::Initialize() - team state reset");
 
         const auto& inst_cfg = AlphaRing::Config::GetInstanceConfig();
-
-        if (inst_cfg.loaded && inst_cfg.ringchief_enabled && inst_cfg.player_count > 0) {
-            // V2 RingChief multi-player initialization
+        if (inst_cfg.loaded) {
+            // Launched by Nucleus: start with split-screen off so the instance can join LAN
+            // first; the host turns it on from the overlay.
             auto p_setting = AlphaRing::Global::MCC::Splitscreen();
-
-            LOG_INFO("[RINGCHIEF] Multi-player init: player_count={}, starting DISABLED (use RingChief to enable)",
-                inst_cfg.player_count);
-
-            // Set player count BEFORE roster init
             p_setting->player_count = inst_cfg.player_count;
-            // Start DISABLED when launched from Nucleus Coop - user enables via RingChief
-            // This allows joining other instances before enabling splitscreen
             p_setting->b_override = false;
             p_setting->b_override_profile = true;
-
-            // Apply profiles to all slots 0..N-1
-            int applied = 0;
-            int missing = 0;
-            for (int i = 0; i < inst_cfg.player_count && i < 4 && i < (int)inst_cfg.players.size(); i++) {
-                const auto& pc = inst_cfg.players[i];
-
-                if (pc.profile_name.empty()) {
-                    LOG_INFO("[RINGCHIEF] Slot {}: no profile specified, skipping", i);
-                    continue;
-                }
-
-                auto* prof = ProfileManager::GetProfileByKey(pc.profile_name);
-                if (prof) {
-                    ProfileManager::selected_profile_key[i] = pc.profile_name;
-                    ProfileManager::ApplyToSlot(i, *prof);
-                    ProfileManager::current_preset[i] = static_cast<int>(prof->controller_preset);
-                    ProfileManager::current_team[i] = static_cast<int>(prof->team_preference);
-                    applied++;
-                    LOG_INFO("[RINGCHIEF] Slot {}: applied profile '{}' (name='{}', team={}, preset={})",
-                        i, pc.profile_name, pc.display_name,
-                        static_cast<int>(prof->team_preference),
-                        static_cast<int>(prof->controller_preset));
-                } else {
-                    missing++;
-                    LOG_WARNING("[RINGCHIEF] Slot {}: profile '{}' not found on disk", i, pc.profile_name);
-                }
-            }
-
-            LOG_INFO("[RINGCHIEF] Multi-player init complete: {}/{} profiles applied, {} missing",
-                applied, inst_cfg.player_count, missing);
-
-        } else if (AlphaRing::Config::ShouldAutoLoadProfile()) {
-            // V1 single-player fallback
-            const auto& profile_name = AlphaRing::Config::GetAutoLoadProfileName();
-            auto* prof = ProfileManager::GetProfileByKey(profile_name);
-
-            if (prof) {
-                ProfileManager::selected_profile_key[0] = profile_name;
-                ProfileManager::ApplyToSlot(0, *prof);
-                ProfileManager::current_preset[0] = static_cast<int>(prof->controller_preset);
-                ProfileManager::current_team[0] = static_cast<int>(prof->team_preference);
-                LOG_INFO("[RINGCHIEF] V1 fallback: auto-loaded profile '{}' to slot 0", profile_name);
-            } else {
-                LOG_WARNING("[RINGCHIEF] V1 fallback: profile '{}' not found", profile_name);
-            }
-        } else {
-            LOG_INFO("[RINGCHIEF] No instance config or RingChief not enabled, manual mode");
         }
+
+        // Ring Chief: group login, profiles from halo.dronedude.app, live updates.
+        RingChief::Game::Initialize();
 
         return true;
     }
@@ -237,15 +179,18 @@ namespace MCC::Splitscreen {
     void SessionRosterTab();
     void GameStatsTab();
 
+    // Runs every frame from the render loop, whether or not the overlay is showing.
+    void Tick() {
+        UpdateTeamStateMachine();
+        ProfileManager::ProcessPendingArmor();
+        RingChief::Game::Tick();
+    }
+
     void ImGuiContext() {
         static bool show_splitscreen = true;
         static bool show_session_details;
-
-        // Run team state machine every frame (even when UI is closed)
-        UpdateTeamStateMachine();
-
-        // Process pending armor changes (debounced)
-        ProfileManager::ProcessPendingArmor();
+        static bool show_ringchief = true;
+        if (RingChief::Game::WantsAttention()) show_ringchief = true;
 
         if (ImGui::BeginMainMenuBar()) {
             ImGui::MenuItem("Splitscreen", nullptr, &show_splitscreen);
@@ -266,31 +211,11 @@ namespace MCC::Splitscreen {
                 ImGui::EndTooltip();
             }
 
-            // TCP Server connection status
+            // Ring Chief status (click to open the Ring Chief window)
             ImGui::Separator();
-            auto* client = MCC::Server::Client::Get();
-            if (client && MCC::Server::Client::IsConnected()) {
-                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "[TCP: OK]");
-            } else if (client) {
-                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "[TCP: ...]");
-            } else {
-                ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "[TCP: OFF]");
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
-                ImGui::Text("Ring Chief Server Connection:");
-                if (client && MCC::Server::Client::IsConnected()) {
-                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Connected to Ring Chief Display");
-                    ImGui::Text("Team pushes from display will work.");
-                } else if (client) {
-                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "Connecting to localhost:42069...");
-                    ImGui::Text("Make sure RingChiefDisplay is running.");
-                } else {
-                    ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "TCP Client not initialized");
-                    ImGui::Text("Check server configuration.");
-                }
-                ImGui::EndTooltip();
-            }
+            RingChief::Game::DrawMenuStatus();
+            if (ImGui::IsItemClicked()) show_ringchief = true;
+            ImGui::MenuItem("Ring Chief", nullptr, &show_ringchief);
 
             ImGui::EndMainMenuBar();
         }
@@ -305,6 +230,10 @@ namespace MCC::Splitscreen {
 
         if (show_session_details) {
             SessionDetailsWindow();
+        }
+
+        if (show_ringchief) {
+            RingChief::Game::DrawWindow(&show_ringchief);
         }
     }
 
@@ -398,6 +327,7 @@ namespace MCC::Splitscreen {
                                 if (prof) {
                                     ProfileManager::selected_profile_key[i] = prof->filename;
                                     ProfileManager::ApplyToSlot(i, *prof);
+                                    RingChief::Game::SlotsChanged();
                                     ProfileManager::current_preset[i] = static_cast<int>(prof->controller_preset);
                                     ProfileManager::current_team[i] = static_cast<int>(prof->team_preference);
                                 }
@@ -435,11 +365,7 @@ namespace MCC::Splitscreen {
         // Show instance config info if loaded (from Nucleus)
         const auto& inst_cfg = AlphaRing::Config::GetInstanceConfig();
         if (inst_cfg.loaded) {
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f),
-                "LAN Mode: %s | Screen: %s | Session: %s",
-                inst_cfg.display_name.c_str(),
-                inst_cfg.screen_position.c_str(),
-                inst_cfg.session_id.c_str());
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Nucleus instance: %d player(s)", inst_cfg.player_count);
             ImGui::Separator();
         }
 

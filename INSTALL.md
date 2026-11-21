@@ -18,9 +18,11 @@ and loads your Spartan (gamertag, armor, controls, team) from your Ring Chief gr
 
 1. Download `AlphaRing-RingChief-<version>.zip` from the
    [Releases page](https://github.com/Adam-Jackson-Engineer/AlphaRing/releases) and unzip it.
-2. Right-click `install-ringchief.ps1` → **Run with PowerShell**.
+2. Close MCC, then double-click **`Install.bat`**.
    It finds MCC through Steam, backs up any existing `WTSAPI32.dll`, and copies the new one in.
-   If Windows asks whether to run the script, choose **Open** / **Run once**.
+   If Windows SmartScreen says "Windows protected your PC", click **More info** → **Run anyway**.
+   If it says "Copy failed", right-click `Install.bat` → **Run as administrator**.
+   (`Install.bat` just runs `install-ringchief.ps1`; you can run that yourself instead.)
 
 ## Install (by hand)
 
@@ -58,12 +60,12 @@ The first MCC window signs in; the others connect through it automatically (you'
 
 ## Updating
 
-Download the new release and run `install-ringchief.ps1` again (or copy the new DLL over the
+Download the new release and double-click `Install.bat` again (or copy the new DLL over the
 old one). Your login and group stay.
 
 ## Uninstalling
 
-Run `install-ringchief.ps1 -Uninstall`, or delete `WTSAPI32.dll` from the folder above (and
+Double-click **`Uninstall.bat`** (or run `install-ringchief.ps1 -Uninstall`), or delete `WTSAPI32.dll` from the folder above (and
 rename your backup back if you had one). To forget this PC's login, delete
 `C:\ProgramData\RingChief`.
 

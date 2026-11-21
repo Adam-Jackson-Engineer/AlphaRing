@@ -1,7 +1,7 @@
 > **Pre-release:** builds and passes its automated tests (including an end-to-end test against the website), but hasn't been played in a live MCC match yet. Try it before a Halo night, not during one.
 
 **For Halo MCC 1.3528.0.0 (Steam).** Install: download `AlphaRing-RingChief-*.zip`, unzip,
-run `install-ringchief.ps1` (or copy `WTSAPI32.dll` into
+double-click `Install.bat` (or copy `WTSAPI32.dll` into
 `Halo The Master Chief Collection\MCC\Binaries\Win64\`). Full steps: [INSTALL.md](https://github.com/Adam-Jackson-Engineer/AlphaRing/blob/ringchief/INSTALL.md).
 
 Launch MCC with **Anti-Cheat Disabled**, then sign in in the Ring Chief window with your
@@ -13,6 +13,10 @@ Group ID and password (server `halo.dronedude.app`).
 - One PC connection shared by every MCC window on that PC (works with Nucleus Co-op), with failover.
 - Players can pick their screen in the overlay or tap "That's me" on their phone.
 - Local backups of the group's profiles on each PC (Ring Chief window → Local backups): play offline from any of the last 20.
+
+### New in pre4
+- Double-click `Install.bat` / `Uninstall.bat` in the zip: no PowerShell steps, and Windows' block on
+  downloaded scripts no longer stops the installer. Same mod DLL as pre3.
 
 ### New in pre3
 - Default: player N uses controller N, keyboard & mouse off (choose per screen in the Ring Chief window).

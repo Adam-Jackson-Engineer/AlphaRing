@@ -40,6 +40,12 @@ namespace RingChief {
         virtual void ApplyTeams(const std::map<std::string, int>& teams) = 0;
         // {"inGame":bool,"game":..,"mode":..,"map":..,"matchEpoch":n,"players":[...]} or null
         virtual json LiveStats() = 0;
+        // How this screen is set up, for the phone remote:
+        // {"enabled","overlay","inGame","keyboardP1","players","controllers":[4],"connected":[4]}
+        virtual json ScreenConfig() { return nullptr; }
+        // Applies a change from the phone remote (same keys plus "slots":{"0":"p_.."|null}).
+        // All or nothing; false + a message if it can't.
+        virtual bool ApplyControl(const json& /*set*/, std::string& err) { err = "Not supported"; return false; }
     };
 
     class Session {
@@ -71,9 +77,18 @@ namespace RingChief {
 
         // UI actions (hub only)
         void Login(const std::string& server, const std::string& group_id, const std::string& password, bool remember);
+        // Sign in without a password: shows a code to approve from a phone (PairCode()).
+        void LoginWithCode(const std::string& server, bool remember);
+        void CancelLogin();
         void PlayOffline();                              // latest local copy of the group
         bool PlayFromBackup(const std::string& path);    // a specific local backup
         void Logout();
+
+        // Group tools for a PC signed in with a code (hub only; results arrive as frames).
+        void SwitchGroup(const std::string& group_id);   // "" = no group
+        void NewScreenCode();
+        void AddPlayer(const std::string& gamertag);
+        void RemovePlayer(const std::string& profile_id);
 
         // Local backups of the group's profiles (hub only; followers use the hub's).
         bool BackupNow();                                // false if nothing changed / no group
@@ -92,14 +107,20 @@ namespace RingChief {
         const std::string& GroupInput() const { return group_input_; }
         const std::string& GroupName() const { return group_name_; }
         std::string NightName() const;
+        const std::string& PairCode() const { return pair_code_; }   // "" unless waiting for a phone
+        const std::string& PairUrl() const { return pair_url_; }
+        const json& Pc() const { return pc_; }                       // last "pc" frame (screen code, groups, ...)
+        const std::string& Notice() const { return notice_; }        // result of the last group action
         size_t FollowerCount() const { return link_.FollowerCount(); }
         const std::vector<V5Profile>& Profiles() const { return profiles_; }
         bool WantsLoginPanel() const;
 
     private:
-        struct Event { enum Kind { LoginOk, LoginFailed, Connected, Frame, Disconnected, AuthFailed } kind; std::string text; json data; };
+        struct Event { enum Kind { PairCode, LoginOk, LoginFailed, Connected, Frame, Disconnected, AuthFailed } kind; std::string text; json data; };
 
-        void StartWorker(const ServerAddr& server, const std::string& token, const std::string& login_body);
+        void StartWorker(const ServerAddr& server, const std::string& token, const std::string& login_body, bool pair = false);
+        bool WaitForPairing(const ServerAddr& server, const std::string& body, std::string& token);   // worker thread
+        void SaveCurrentLogin();
         void StopWorker();
         void Push(Event e);
         void Drain(double now_s);
@@ -130,6 +151,9 @@ namespace RingChief {
         std::string group_name_;
         std::string token_;
         bool remember_ = true;
+        std::string expires_at_;
+        std::string pair_code_, pair_url_, notice_;
+        json pc_;
 
         // group
         std::vector<V5Profile> profiles_;

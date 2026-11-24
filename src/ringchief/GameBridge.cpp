@@ -11,6 +11,7 @@
 #include "common.h"
 #include "imgui.h"
 #include "global/Global.h"
+#include "input/Input.h"
 #include "mcc/mcc.h"
 #include "mcc/CGameManager.h"
 #include "mcc/CGameGlobal.h"
@@ -88,6 +89,39 @@ namespace RingChief::Game {
             ProfileManager::SetSlotTeam(slot, t != g_teams.end() ? t->second : static_cast<int>(prof->team_preference));
         }
 
+        // Empties a seat: no Ring Chief profile, plain "Player N" name.
+        void ClearSlot(int slot) {
+            ProfileManager::selected_profile_key[slot].clear();
+            if (auto* p = CGameManager::get_profile(slot)) swprintf(p->name, 16, L"Player %d", slot + 1);
+        }
+
+        // Which controllers are plugged in. Asking XInput about an empty port is slow, so one
+        // port a second, in turn.
+        const bool* ConnectedControllers() {
+            static bool connected[4] = {false, false, false, false};
+            static int next = 0;
+            static double next_at = 0;
+            double now = Now();
+            if (now >= next_at) {
+                next_at = now + 0.75;
+                XINPUT_STATE state;
+                connected[next] = AlphaRing::Input::GetXInputGetState(next, &state);
+                next = (next + 1) % 4;
+            }
+            return connected;
+        }
+
+        // AlphaRing split-screen with Ring Chief profiles, on or off.
+        void SetEnabled(bool on) {
+            auto* ss = AlphaRing::Global::MCC::Splitscreen();
+            ss->b_override = on;
+            if (on) {
+                ss->b_override_profile = true;
+                ss->b_use_player0_profile = false;
+                for (int i = 0; i < 4; i++) ApplySlot(i);
+            }
+        }
+
         class MccAdapter : public GameAdapter {
         public:
             std::string InstanceId() override { return id_; }
@@ -127,7 +161,9 @@ namespace RingChief::Game {
             }
 
             void AssignSlot(int slot, const std::string& id) override {
-                if (slot < 0 || slot >= 4 || !ProfileManager::GetProfileByKey(id)) return;
+                if (slot < 0 || slot >= 4) return;
+                if (id.empty()) { ClearSlot(slot); return; }
+                if (!ProfileManager::GetProfileByKey(id)) return;
                 ProfileManager::selected_profile_key[slot] = id;
                 ApplySlot(slot);
                 LOG_INFO("[RINGCHIEF] Slot {} claimed by {}", slot, id);
@@ -157,6 +193,65 @@ namespace RingChief::Game {
                 }
                 return {{"inGame", true}, {"game", GameTitle()}, {"mode", ""}, {"map", ""},
                         {"matchEpoch", ProfileManager::GetMatchEpoch()}, {"players", players}};
+            }
+
+            json ScreenConfig() override {
+                auto* ss = AlphaRing::Global::MCC::Splitscreen();
+                const bool* connected = ConnectedControllers();
+                json controllers = json::array(), plugged = json::array();
+                for (int i = 0; i < 4; i++) {
+                    controllers.push_back(std::clamp(CGameManager::get_profile(i)->controller_index, 0, 4));
+                    plugged.push_back(connected[i]);
+                }
+                return {{"enabled", ss->b_override}, {"overlay", AlphaRing::Global::Global()->show_imgui},
+                        {"inGame", MCC::IsInGame()}, {"keyboardP1", ss->b_player0_use_km},
+                        {"players", std::clamp(ss->player_count, 1, 4)},
+                        {"controllers", controllers}, {"connected", plugged}};
+            }
+
+            bool ApplyControl(const json& set, std::string& err) override {
+                auto* ss = AlphaRing::Global::MCC::Splitscreen();
+                auto flag = [&](const char* k) { return set.contains(k) && set[k].is_boolean(); };
+
+                // Check everything first, so a bad change does nothing at all.
+                int players = std::clamp(ss->player_count, 1, 4);
+                if (set.contains("players")) {
+                    if (!set["players"].is_number_integer()) { err = "Players must be 1-4"; return false; }
+                    players = set["players"].get<int>();
+                    if (players < 1 || players > 4) { err = "Players must be 1-4"; return false; }
+                }
+                int pads[4];
+                bool set_pads = set.contains("controllers");
+                if (set_pads) {
+                    const auto& c = set["controllers"];
+                    bool ok = c.is_array() && c.size() == 4;
+                    for (int i = 0; ok && i < 4; i++) {
+                        ok = c[i].is_number_integer();
+                        if (ok) pads[i] = c[i].get<int>();
+                        ok = ok && pads[i] >= 0 && pads[i] <= 4;
+                        for (int j = 0; ok && j < i; j++) ok = pads[i] == 4 || pads[j] != pads[i];
+                    }
+                    if (!ok) { err = "Those controllers don't work together"; return false; }
+                }
+                std::map<int, std::string> seats;
+                if (set.contains("slots") && set["slots"].is_object()) {
+                    for (const auto& [k, v] : set["slots"].items()) {
+                        if (k.size() != 1 || k[0] < '0' || k[0] > '3') { err = "No such seat"; return false; }
+                        std::string id = v.is_string() ? v.get<std::string>() : "";
+                        if (!id.empty() && !ProfileManager::GetProfileByKey(id)) { err = "That player isn't loaded on this PC"; return false; }
+                        seats[k[0] - '0'] = id;
+                    }
+                }
+
+                ss->player_count = players;
+                if (set_pads) for (int i = 0; i < 4; i++) CGameManager::get_profile(i)->controller_index = pads[i];
+                if (flag("keyboardP1")) ss->b_player0_use_km = set["keyboardP1"].get<bool>();
+                for (const auto& [slot, id] : seats) if (id.empty()) AssignSlot(slot, "");
+                for (const auto& [slot, id] : seats) if (!id.empty()) AssignSlot(slot, id);
+                if (flag("enabled")) SetEnabled(set["enabled"].get<bool>());
+                if (flag("overlay")) AlphaRing::Global::Global()->show_imgui = set["overlay"].get<bool>();
+                LOG_INFO("[RINGCHIEF] Remote change: {}", set.dump());
+                return true;
             }
 
         private:
@@ -277,26 +372,101 @@ namespace RingChief::Game {
                 if (ImGui::RadioButton(label, players == n) && players != n) {
                     // Always AlphaRing input: player N = controller N, profiles applied.
                     ss->player_count = n;
-                    ss->b_override = true;
-                    ss->b_override_profile = true;
-                    ss->b_use_player0_profile = false;
+                    SetEnabled(true);
                     g_session->SlotsChanged();
                 }
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("With Nucleus, join the LAN lobby first, then add players here.");
 
-            ImGui::Text("Player 1 uses");
-            ImGui::SameLine();
             if (!ss->b_override) {
-                ImGui::TextDisabled("anything (split-screen is off)");
-            } else {
-                if (ImGui::RadioButton("Controller 1##p1", !ss->b_player0_use_km)) ss->b_player0_use_km = false;
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Keyboard & mouse##p1", ss->b_player0_use_km)) ss->b_player0_use_km = true;
+                ImGui::TextDisabled("AlphaRing is off on this screen: Halo uses its own profile and controls.");
+                if (ImGui::SmallButton("Turn on")) { SetEnabled(true); g_session->SlotsChanged(); }
+                return;
             }
-            if (ss->b_override && players > 1)
-                ImGui::TextDisabled("Players 2-%d use controllers 2-%d.", players, players);
+            const bool* connected = ConnectedControllers();
+            for (int i = 0; i < players; i++) {
+                int& pad = CGameManager::get_profile(i)->controller_index;
+                bool km = i == 0 && ss->b_player0_use_km;
+                auto pad_name = [&](int c) {
+                    return c >= 0 && c < 4 ? "Controller " + std::to_string(c + 1) + (connected[c] ? "" : " (off)") : std::string("No controller");
+                };
+                char label[40];
+                snprintf(label, sizeof(label), "Player %d uses##pad%d", i + 1, i);
+                if (ImGui::BeginCombo(label, km ? "Keyboard & mouse" : pad_name(pad).c_str())) {
+                    if (i == 0 && ImGui::Selectable("Keyboard & mouse", km)) ss->b_player0_use_km = true;
+                    for (int c = 0; c <= 4; c++) {
+                        if (!ImGui::Selectable(pad_name(c).c_str(), !km && pad == c)) continue;
+                        // Swap with whoever has it, so two players never share one.
+                        for (int j = 0; c < 4 && j < 4; j++) {
+                            int& other = CGameManager::get_profile(j)->controller_index;
+                            if (j != i && other == c) other = pad;
+                        }
+                        pad = c;
+                        if (i == 0) ss->b_player0_use_km = false;
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            if (ImGui::SmallButton("Turn AlphaRing off on this screen")) { SetEnabled(false); g_session->SlotsChanged(); }
+        }
+
+        // Phone remote + adding people, from the server's "pc" frame.
+        void FriendsSection() {
+            auto* s = g_session.get();
+            const json& pc = s->Pc();
+            if (!pc.is_object() || s->GetState() != Session::State::Online) return;
+            const std::string code = pc.value("code", ""), url = pc.value("codeUrl", "");
+            if (!code.empty()) {
+                ImGui::Text("Phones: %s", url.c_str());
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.72f, 0.88f, 1.0f, 1), "%s", code.c_str());
+                ImGui::SameLine();
+                if (ImGui::SmallButton("New code")) s->NewScreenCode();
+                ImGui::TextDisabled("Loads your Spartan here and makes the phone a remote.");
+            }
+            // Group on this PC (only PCs signed in with a code can switch).
+            if (!pc.value("owner", "").empty() && pc.contains("groups") && pc["groups"].is_array()) {
+                const std::string current = pc.value("groupId", "");
+                if (ImGui::BeginCombo("Group", s->GroupName().c_str())) {
+                    if (ImGui::Selectable("No group", current.empty())) s->SwitchGroup("");
+                    for (const auto& g : pc["groups"]) {
+                        const std::string id = g.value("id", ""), name = g.value("name", "") + "##" + id;
+                        if (ImGui::Selectable(name.c_str(), id == current)) s->SwitchGroup(id);
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            if (pc.value("canManage", false) && ImGui::CollapsingHeader("Manage group")) {
+                ImGui::Text("Friends join this group with code");
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.72f, 0.88f, 1.0f, 1), "%s", pc.value("joinCode", "").c_str());
+                static char name[24] = {0};
+                ImGui::InputTextWithHint("##newplayer", "New friend's gamertag", name, sizeof(name));
+                ImGui::SameLine();
+                if (ImGui::Button("Add") && name[0]) { s->AddPlayer(name); name[0] = 0; }
+                static std::string confirm;
+                std::string owner = pc.value("owner", "");
+                for (const auto& p : s->Profiles()) {
+                    bool member = false;
+                    if (pc.contains("memberIds") && pc["memberIds"].is_array())
+                        for (const auto& m : pc["memberIds"]) if (m.is_string() && m.get<std::string>() == p.id) member = true;
+                    if (!member) continue;
+                    ImGui::PushID(p.id.c_str());
+                    ImGui::Text("%s", MCC::Splitscreen::wstring_to_utf8(p.gamertag).c_str());
+                    ImGui::SameLine(ImGui::GetFontSize() * 14.0f);
+                    if (ImGui::SmallButton(confirm == p.id ? "Really remove?" : "Remove")) {
+                        std::string id = p.id;
+                        if (confirm == id) { confirm.clear(); s->RemovePlayer(id); } else confirm = id;
+                    }
+                    ImGui::PopID();
+                }
+            }
+            if (!s->Notice().empty()) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26.0f);
+                ImGui::TextColored(ImVec4(0.95f, 0.8f, 0.3f, 1), "%s", s->Notice().c_str());
+                ImGui::PopTextWrapPos();
+            }
         }
 
         void TroubleshootingSection() {
@@ -347,7 +517,7 @@ namespace RingChief::Game {
         static bool remember = true, filled = false;
         if (!filled) {
             strncpy_s(server, s->ServerInput().c_str(), _TRUNCATE);
-            strncpy_s(group, s->GroupInput().c_str(), _TRUNCATE);
+            if (s->GroupInput().rfind("pc_", 0) != 0) strncpy_s(group, s->GroupInput().c_str(), _TRUNCATE);
             filled = true;
         }
 
@@ -372,21 +542,34 @@ namespace RingChief::Game {
             SlotPickers();
             TroubleshootingSection();
         } else if (state == Session::State::LoggedOut || state == Session::State::Working) {
-            ImGui::TextWrapped("Join your group to load everyone's Spartans.");
-            ImGui::Spacing();
-            ImGui::InputText("Server", server, sizeof(server));
-            ImGui::InputText("Group ID", group, sizeof(group));
-            ImGui::InputText("Password", password, sizeof(password), ImGuiInputTextFlags_Password);
-            ImGui::Checkbox("Remember on this PC", &remember);
-            if (state == Session::State::Working) {
+            if (state == Session::State::Working && !s->PairCode().empty()) {
+                ImGui::TextWrapped("On your phone, open your personal link, then go to");
+                ImGui::Text("%s", s->PairUrl().c_str());
+                ImGui::Text("and enter");
+                ImGui::SetWindowFontScale(2.0f);
+                ImGui::TextColored(ImVec4(0.72f, 0.88f, 1.0f, 1), "%s", s->PairCode().c_str());
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::TextDisabled("Waiting for your phone...");
+                if (ImGui::Button("Cancel")) s->CancelLogin();
+            } else if (state == Session::State::Working) {
                 ImGui::TextColored(ImVec4(0.95f, 0.8f, 0.3f, 1), "Signing in...");
+                if (ImGui::Button("Cancel")) s->CancelLogin();
             } else {
-                if (ImGui::Button("Join")) {
-                    s->Login(server, group, password, remember);
-                    SecureZeroMemory(password, sizeof(password));
-                }
+                ImGui::TextWrapped("Sign in to load your Spartans. No group needed.");
+                ImGui::Spacing();
+                if (ImGui::Button("Sign in with a code")) s->LoginWithCode(server, remember);
                 ImGui::SameLine();
                 if (ImGui::Button("Play offline")) s->PlayOffline();
+                ImGui::Checkbox("Remember on this PC", &remember);
+                if (ImGui::CollapsingHeader("Use a group password instead")) {
+                    ImGui::InputText("Group ID", group, sizeof(group));
+                    ImGui::InputText("Password", password, sizeof(password), ImGuiInputTextFlags_Password);
+                    if (ImGui::Button("Join")) {
+                        s->Login(server, group, password, remember);
+                        SecureZeroMemory(password, sizeof(password));
+                    }
+                }
+                if (ImGui::CollapsingHeader("Server")) ImGui::InputText("Server", server, sizeof(server));
             }
             if (!s->Error().empty()) ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1), "%s", s->Error().c_str());
             ImGui::Spacing();
@@ -399,6 +582,7 @@ namespace RingChief::Game {
             if (!s->NightName().empty()) ImGui::Text("Tonight: %s", s->NightName().c_str());
             if (s->FollowerCount()) ImGui::Text("Other screens on this PC: %zu", s->FollowerCount());
             if (!s->Error().empty() && state != Session::State::Online) ImGui::TextColored(ImVec4(0.95f, 0.8f, 0.3f, 1), "%s", s->Error().c_str());
+            FriendsSection();
             ImGui::Separator();
             ScreenSection();
             ImGui::Separator();

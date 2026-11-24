@@ -77,6 +77,40 @@ TEST_CASE("follower: says hello with its instance and slots") {
     CHECK(hello["instances"][0]["slots"][1]["profileId"] == "p_b");
 }
 
+TEST_CASE("follower: remote changes are applied only by their own screen, and answered") {
+    uint16_t port = RandomPort();
+    ScriptedHub hub(port);
+    FakeGame game("PC_screen");
+    game.config = {{"enabled", true}, {"players", 2}};
+    Session s(game, Opts(port));
+    s.Start();
+    REQUIRE(Run(s, hub, [&] { return hub.Count("hello") == 1; }));
+    CHECK(hub.Last("hello")["instances"][0]["config"]["players"] == 2);
+    hub.Send({{"type", "control"}, {"commandId", "c0"}, {"instanceId", "PC_other"}, {"set", {{"players", 4}}}});
+    hub.Send({{"type", "control"}, {"commandId", "c1"}, {"instanceId", "PC_screen"}, {"set", {{"players", 3}}}});
+    REQUIRE(Run(s, hub, [&] { return hub.Count("ack") == 1; }));
+    REQUIRE(game.controls.size() == 1);
+    CHECK(game.controls[0]["players"] == 3);
+    CHECK(hub.Last("ack")["commandId"] == "c1");
+    CHECK(hub.Last("ack")["ok"] == true);
+    game.control_error = "No such seat";
+    hub.Send({{"type", "control"}, {"commandId", "c2"}, {"instanceId", "PC_screen"}, {"set", {{"players", 1}}}});
+    REQUIRE(Run(s, hub, [&] { return hub.Count("ack") == 2; }));
+    CHECK(hub.Last("ack")["ok"] == false);
+    CHECK(hub.Last("ack")["error"] == "No such seat");
+    // a broken frame is answered, not crashed on
+    hub.Send({{"type", "control"}, {"commandId", "c3"}, {"instanceId", "PC_screen"}});
+    REQUIRE(Run(s, hub, [&] { return hub.Count("ack") == 3; }));
+    CHECK(game.controls.size() == 2);
+    // the screen's own changes are reported
+    game.config["players"] = 4;
+    REQUIRE(Run(s, hub, [&] { return hub.Count("instances") >= 1 && hub.Last("instances")["instances"][0]["config"]["players"] == 4; }));
+    // the PC's code isn't part of the cached group
+    hub.Send({{"type", "pc"}, {"code", "BCDF-GHJK"}});
+    REQUIRE(Run(s, hub, [&] { return s.Pc().is_object(); }));
+    CHECK(s.Pc()["code"] == "BCDF-GHJK");
+}
+
 TEST_CASE("follower: welcome, live profile edits, removal, night and teams reach the game") {
     uint16_t port = RandomPort();
     ScriptedHub hub(port);

@@ -64,7 +64,10 @@ namespace RingChief {
             if (Storage::LoadLogin(saved)) {
                 server_input_ = saved.server;
                 group_input_ = saved.group_id;
-                if (!saved.token.empty() && !Expired(saved.expires_at)) token_ = saved.token;
+                if (!saved.token.empty() && !Expired(saved.expires_at)) {
+                    token_ = saved.token;
+                    expires_at_ = saved.expires_at;
+                }
             }
         }
         BecomeRole(0);
@@ -111,13 +114,61 @@ namespace RingChief {
         if (!ParseServer(server, server_, err)) { error_ = err; return; }
         if (group_id.empty() || password.empty()) { error_ = "Enter the group ID and password"; return; }
         error_.clear();
+        pair_code_.clear();
         state_ = State::Working;
         json body{{"groupId", group_id}, {"password", password}, {"hostname", game_.InstanceId()}};
         StartWorker(server_, "", body.dump());
     }
 
+    void Session::LoginWithCode(const std::string& server, bool remember) {
+        if (link_.GetRole() == LocalLink::Role::Follower) return;
+        server_input_ = server;
+        remember_ = remember;
+        std::string err;
+        if (!ParseServer(server, server_, err)) { error_ = err; return; }
+        error_.clear();
+        pair_code_.clear();
+        state_ = State::Working;
+        StartWorker(server_, "", json{{"hostname", game_.InstanceId()}}.dump(), true);
+    }
+
+    void Session::CancelLogin() {
+        StopWorker();
+        {
+            std::lock_guard<std::mutex> lock(inbox_mutex_);
+            inbox_.clear();
+        }
+        pair_code_.clear();
+        error_.clear();
+        state_ = State::LoggedOut;
+    }
+
+    void Session::SwitchGroup(const std::string& group_id) {
+        notice_.clear();
+        SendUp({{"type", "switchGroup"}, {"groupId", group_id.empty() ? json(nullptr) : json(group_id)}});
+    }
+
+    void Session::NewScreenCode() { SendUp({{"type", "newCode"}}); }
+
+    void Session::AddPlayer(const std::string& gamertag) {
+        notice_.clear();
+        SendUp({{"type", "addPlayer"}, {"gamertag", gamertag}});
+    }
+
+    void Session::RemovePlayer(const std::string& profile_id) {
+        notice_.clear();
+        SendUp({{"type", "removePlayer"}, {"profileId", profile_id}});
+    }
+
+    void Session::SaveCurrentLogin() {
+        if (!opt_.use_storage) return;
+        Storage::SavedLogin s{server_input_, group_input_, remember_ ? token_ : "", remember_ ? expires_at_ : ""};
+        Storage::SaveLogin(s);
+    }
+
     void Session::PlayOffline() {
         StopWorker();
+        pair_code_.clear();
         json cached;
         if (opt_.use_storage && Storage::LoadGroupCache(group_input_, cached)) {
             ApplyWelcome(cached);
@@ -179,6 +230,8 @@ namespace RingChief {
             std::thread([server = server_, tok = token_]() { PostJson(server, "/api/hub/logout", "{}", tok, 3000); }).detach();
         }
         token_.clear();
+        pc_ = json();
+        notice_.clear();
         if (opt_.use_storage) {
             Storage::SavedLogin keep{server_input_, group_input_, "", ""};
             Storage::SaveLogin(keep);
@@ -194,12 +247,48 @@ namespace RingChief {
         inbox_.push_back(std::move(e));
     }
 
-    void Session::StartWorker(const ServerAddr& server, const std::string& token, const std::string& login_body) {
+    // Shows a code and waits until a phone answers. False: failed (already reported) or stopped.
+    bool Session::WaitForPairing(const ServerAddr& server, const std::string& body, std::string& token) {
+        HttpResult r = PostJson(server, "/api/hub/pair/start", body);
+        json start;
+        try { start = json::parse(r.body); } catch (...) {}
+        if (r.status != 200 || !start.is_object() || start.value("deviceCode", "").empty()) {
+            Push({Event::LoginFailed, r.status == 404 ? "This server doesn't support codes yet" : ErrorFrom(r), {}});
+            return false;
+        }
+        Push({Event::PairCode, "", start});
+        const std::string poll = json{{"deviceCode", start["deviceCode"]}}.dump();
+        int interval_ms = std::clamp(start.value("interval", 3), 1, 30) * 1000;
+        auto end = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(start.value("expiresIn", 600), 10, 3600));
+        while (!stopping_ && std::chrono::steady_clock::now() < end) {
+            for (int waited = 0; waited < interval_ms && !stopping_; waited += 100) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (stopping_) return false;
+            r = PostJson(server, "/api/hub/pair/poll", poll, "", 4000);
+            if (r.status == 200) {
+                json j;
+                try { j = json::parse(r.body); } catch (...) {}
+                token = j.is_object() ? j.value("token", "") : "";
+                if (token.empty()) { Push({Event::LoginFailed, "Unexpected reply from the server", {}}); return false; }
+                j["paired"] = true;
+                Push({Event::LoginOk, "", j});
+                return true;
+            }
+            if (r.status == 403 || r.status == 410) { Push({Event::LoginFailed, ErrorFrom(r), {}}); return false; }
+            if (r.status == 429) interval_ms = (std::min)(interval_ms + 5000, 30000);
+            // 202 = not yet; network trouble = keep trying until the code runs out
+        }
+        if (!stopping_) Push({Event::LoginFailed, "That code ran out. Get a new one.", {}});
+        return false;
+    }
+
+    void Session::StartWorker(const ServerAddr& server, const std::string& token, const std::string& login_body, bool pair) {
         StopWorker();
         stopping_ = false;
-        worker_ = std::thread([this, server, token, login_body]() {
+        worker_ = std::thread([this, server, token, login_body, pair]() {
             std::string tok = token;
-            if (!login_body.empty()) {
+            if (pair) {
+                if (!WaitForPairing(server, login_body, tok)) return;
+            } else if (!login_body.empty()) {
                 HttpResult r = PostJson(server, "/api/hub/login", login_body);
                 if (r.status != 200) { Push({Event::LoginFailed, ErrorFrom(r), {}}); return; }
                 json j;
@@ -287,19 +376,26 @@ namespace RingChief {
         }
         for (auto& e : events) {
             switch (e.kind) {
+                case Event::PairCode:
+                    pair_code_ = e.data.value("code", "");
+                    pair_url_ = e.data.value("url", "");
+                    break;
                 case Event::LoginOk: {
                     token_ = e.data.value("token", "");
-                    if (e.data.contains("group")) group_name_ = e.data["group"].value("name", group_input_);
-                    if (opt_.use_storage) {
-                        Storage::SavedLogin s{server_.display, group_input_, remember_ ? token_ : "", remember_ ? e.data.value("expiresAt", "") : ""};
-                        Storage::SaveLogin(s);
+                    expires_at_ = e.data.value("expiresAt", "");
+                    pair_code_.clear();
+                    if (e.data.contains("group") && e.data["group"].is_object()) {
+                        if (e.data.value("paired", false)) group_input_ = e.data["group"].value("id", group_input_);
+                        group_name_ = e.data["group"].value("name", group_input_);
                     }
                     server_input_ = server_.display;
+                    SaveCurrentLogin();
                     link_.Broadcast(json{{"type", "session"}, {"server", server_input_}, {"groupId", group_input_}, {"token", token_}}.dump());
                     break;
                 }
                 case Event::LoginFailed:
                     error_ = e.text;
+                    pair_code_.clear();
                     state_ = State::LoggedOut;
                     break;
                 case Event::Connected:
@@ -325,7 +421,8 @@ namespace RingChief {
                     token_.clear();
                     if (opt_.use_storage) Storage::SaveLogin({server_input_, group_input_, "", ""});
                     state_ = State::LoggedOut;
-                    error_ = "Your login for this PC expired. Enter the group password again.";
+                    pc_ = json();
+                    error_ = "This PC was signed out. Sign in again.";
                     break;
             }
         }
@@ -357,7 +454,7 @@ namespace RingChief {
                 if (type == "hello" || type == "instances") {
                     follower_instances_[msg_in.peer] = msg.contains("instances") ? msg["instances"] : json::array();
                     slots_dirty_ = true;
-                } else if (type == "stats" || type == "matchEnd") {
+                } else if (type == "stats" || type == "matchEnd" || type == "ack") {
                     if (state_ == State::Online) SendUp(msg);
                 }
             } else {
@@ -383,7 +480,10 @@ namespace RingChief {
             std::string pid = game_.SlotProfile(i);
             slots.push_back({{"slot", i}, {"profileId", pid.empty() ? json(nullptr) : json(pid)}});
         }
-        return {{"instanceId", game_.InstanceId()}, {"slots", slots}};
+        json inst{{"instanceId", game_.InstanceId()}, {"slots", slots}};
+        json config = game_.ScreenConfig();
+        if (config.is_object()) inst["config"] = config;
+        return inst;
     }
 
     json Session::CombinedInstances() {
@@ -422,7 +522,33 @@ namespace RingChief {
         std::string type = msg.value("type", "");
         if (type == "welcome") {
             ApplyWelcome(msg);
-            if (from_server) SaveLocalCopy(false);
+            if (from_server) {
+                SaveLocalCopy(false);
+                // Switched group (or lost it): resume in the right one next time.
+                if (!group_id_.empty() && Storage::GroupKey(group_id_) != Storage::GroupKey(group_input_)) {
+                    group_input_ = group_id_;
+                    SaveCurrentLogin();
+                }
+            }
+        } else if (type == "pc") {
+            pc_ = msg;
+        } else if (type == "control") {
+            if (msg.value("instanceId", "") == game_.InstanceId()) {
+                std::string err;
+                bool ok = false;
+                if (msg.contains("set") && msg["set"].is_object()) ok = game_.ApplyControl(msg["set"], err);
+                else err = "Nothing to change";
+                slots_dirty_ = true;
+                SendUp({{"type", "ack"}, {"commandId", msg.value("commandId", "")}, {"ok", ok}, {"error", err}});
+            }
+        } else if (type == "addPlayerResult") {
+            std::string who = msg.value("gamertag", "");
+            if (msg.value("ok", false))
+                notice_ = who + " added. On their phone: " + (pc_.is_object() ? pc_.value("codeUrl", "") : "") + "  code " + msg.value("code", "");
+            else
+                notice_ = msg.value("error", "Could not add that player");
+        } else if (type == "error") {
+            notice_ = msg.value("message", "");
         } else if (type == "profile" && msg.contains("profile")) {
             V5Profile p;
             std::string err;

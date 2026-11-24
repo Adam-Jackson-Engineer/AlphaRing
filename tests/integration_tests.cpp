@@ -177,9 +177,69 @@ TEST_CASE("integration: hub + follower against the halo server" * doctest::skip(
     std::puts("RC_IT_WAIT_REVOKE");
     std::fflush(stdout);
     REQUIRE(RunUntil(follower, follower, [&] { return follower.GetState() == Session::State::LoggedOut; }, 20));
-    CHECK(follower.Error().find("expired") != std::string::npos);
+    CHECK(follower.Error().find("signed out") != std::string::npos);
     CHECK(follower.WantsLoginPanel());
     std::puts("RC_IT_REVOKED_OK");
     std::fflush(stdout);
     follower.Shutdown();
+}
+
+// Sign in with a code, no group; then the phone remote and the in-game group tools.
+TEST_CASE("pairing: code sign-in, remote and group tools against the halo server" * doctest::skip(Env("RC_PAIR_SERVER").empty())) {
+    const std::string server = Env("RC_PAIR_SERVER");
+    const uint16_t port = static_cast<uint16_t>(std::stoi(Env("RC_IT_PORT")));
+    testutil::TempDir storage;
+    struct Reset { ~Reset() { Storage::SetDirForTests(""); } } reset;
+    Session::Options opt;
+    opt.local_port = port;
+    opt.use_storage = true;
+    opt.storage_dir = storage.str();
+    testutil::FakeGame game("PAIR-PC_1");
+    game.slots = 2;
+    game.config = {{"enabled", true}, {"overlay", true}, {"inGame", false}, {"keyboardP1", false}, {"players", 2},
+                   {"controllers", {0, 1, 2, 3}}, {"connected", {true, false, false, false}}};
+    auto say = [](const std::string& text) { std::puts(text.c_str()); std::fflush(stdout); };
+    {
+        Session s(game, opt);
+        s.Start();
+        auto run = [&](const std::function<bool()>& done, double sec = 15) {
+            return testutil::PollUntil([&] { s.Tick(Now()); }, done, sec);
+        };
+        // Cancel goes back to the start at once; a second try works.
+        s.LoginWithCode(server, true);
+        REQUIRE(run([&] { return !s.PairCode().empty(); }));
+        s.CancelLogin();
+        CHECK(s.GetState() == Session::State::LoggedOut);
+        s.LoginWithCode(server, true);
+        REQUIRE(run([&] { return !s.PairCode().empty(); }));
+        say("RC_PAIR_CODE " + s.PairCode());
+        REQUIRE(run([&] { return s.GetState() == Session::State::Online && s.Pc().is_object(); }));
+        CHECK(s.PairCode().empty());
+        CHECK(s.GroupName() == "No group");
+        REQUIRE(s.Profiles().size() == 1);
+        say("RC_PAIR_SCREEN " + s.Pc().value("code", ""));
+        REQUIRE(run([&] { return game.controls.size() == 1; }));       // phone: players, seats
+        CHECK(game.controls[0]["players"] == 3);
+        say("RC_PAIR_CONTROLLED");
+        REQUIRE(run([&] { return s.Profiles().size() == 2; }));        // a friend typed the screen code
+        REQUIRE(s.Pc()["groups"].size() == 1);
+        s.SwitchGroup(s.Pc()["groups"][0]["id"].get<std::string>());
+        REQUIRE(run([&] { return s.Pc().value("canManage", false); }));
+        CHECK(s.GroupName() == "PairGroup");
+        s.AddPlayer("From The Couch");
+        REQUIRE(run([&] { return s.Notice().find("code ") != std::string::npos; }));
+        s.AddPlayer("bad<name>");
+        REQUIRE(run([&] { return s.Notice().find("code ") == std::string::npos && !s.Notice().empty(); }));
+        say("RC_PAIR_MANAGED");
+    }
+    {   // next launch: signed straight back in, same group
+        Session s(game, opt);
+        s.Start();
+        REQUIRE(testutil::PollUntil([&] { s.Tick(Now()); }, [&] { return s.GetState() == Session::State::Online && s.Pc().is_object(); }, 15));
+        CHECK(s.GroupName() == "PairGroup");
+        say("RC_PAIR_RESUMED");
+        // the owner signs this PC out from the phone
+        REQUIRE(testutil::PollUntil([&] { s.Tick(Now()); }, [&] { return s.GetState() == Session::State::LoggedOut; }, 20));
+        CHECK(s.Error().find("signed out") != std::string::npos);
+    }
 }

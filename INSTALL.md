@@ -10,7 +10,6 @@ and loads your Spartan (gamertag, armor, controls, team) from your Ring Chief gr
 ## Before you start
 
 - Halo MCC installed through Steam.
-- Your host sends you a **Group ID** and **password** (for example `WarGames2027`).
 - Your own Spartan is set up from the invite link you were sent. You don't need anything
   else installed on your PC for that; it all happens on the website.
 
@@ -41,15 +40,17 @@ so you can go back.
 1. In Steam press **Play** on Halo MCC and choose **"Play Halo: MCC Anti-Cheat Disabled"**.
    The mod can't run with Easy Anti-Cheat on, so online matchmaking is off while you use it.
    LAN / System Link and split-screen work.
-2. The AlphaRing overlay opens. In the **Ring Chief** window enter:
-   - **Server:** `halo.dronedude.app` (already filled in)
-   - **Group ID:** what your host sent (for example `WarGames2027`)
-   - **Password:** the group password
-   - Tick **Remember on this PC** so you only do this once (the password isn't saved; the
-     PC gets a login that lasts two weeks).
-3. Pick who is playing on each screen in the Ring Chief window, or have each player open the
-   group page on their phone and tap **"That's me"** next to their screen.
-4. Press **Insert** (or **Back + Start** on a controller) to hide or show the overlay.
+2. The AlphaRing overlay opens. In the **Ring Chief** window press **Sign in with a code**.
+   - On your phone open your personal link, tap **Enter a code**, and type the code on screen.
+   - Choose a group, or no group (just you and friends on this PC).
+   - Leave **Remember on this PC** ticked so you only do this once (lasts 90 days).
+   - No phone? **Use a group password instead** takes the Group ID and password from your host
+     (lasts two weeks; the password isn't saved).
+3. Friends in the room open `halo.dronedude.app/code` on their phones and enter the code shown
+   in the Ring Chief window. Their Spartan loads and their phone can control this PC.
+4. Pick who is playing, and with which controller, in the Ring Chief window or with the phone
+   **Remote**. The remote can also turn AlphaRing off and on.
+5. Press **Insert** (or **Back + Start** on a controller) to hide or show the overlay.
 
 **Play offline** uses the last group this PC downloaded, if the internet is down.
 
@@ -76,7 +77,8 @@ rename your backup back if you had one). To forget this PC's login, delete
 | No overlay at all | Make sure you launched with **Anti-Cheat Disabled**, and that the DLL is in `MCC\Binaries\Win64`, not the game's top folder. |
 | Antivirus deletes or blocks the DLL | It hooks into the game, which some antivirus flags. Download only from the Releases page above, check the SHA-256 in `SHA256SUMS.txt`, and allow the file. |
 | "Wrong group ID or password" | Group IDs ignore capitals; check the password with your host. After 10 wrong tries wait 15 minutes. |
-| "Your login for this PC expired" | Enter the group password again (logins last 14 days, and end early if the host changes the password). |
+| "This PC was signed out" | Sign in again. Logins run out, and end early if the host changes the group password, the owner signs the PC out, or gets a new personal link. |
+| The code ran out or isn't accepted | Codes last 10 minutes. Press **Sign in with a code** for a new one. After 10 wrong codes wait 15 minutes. |
 | Game crashes on start after an MCC update | MCC updated and AlphaRing doesn't support that version yet. Remove the DLL until a new release is out. |
 | Your armor/controls didn't change | Changes apply at the next safe moment; if a match is running, they apply when the next one starts. |
 

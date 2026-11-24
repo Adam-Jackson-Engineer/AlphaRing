@@ -4,8 +4,8 @@ A fork of [AlphaRing](https://github.com/WinterSquire/AlphaRing), the modding to
 Halo: The Master Chief Collection, set up for **Halo LAN nights**:
 
 - **Split-screen** for up to 4 players per MCC window (all games), from upstream AlphaRing.
-- **Ring Chief**: sign in to your group on [halo.dronedude.app](https://halo.dronedude.app)
-  with a Group ID and password. Everyone's Spartan (gamertag, service tag, armor, controls,
+- **Ring Chief**: sign in on [halo.dronedude.app](https://halo.dronedude.app) with a code from
+  your phone (a group is optional), and use the phone as a remote. Everyone's Spartan (gamertag, service tag, armor, controls,
   team) is loaded from the group, and changes made on a phone apply in game.
 - **Teams and scores**: the host sets teams on the website; results go back to the group's
   scoreboard, stats and voting.

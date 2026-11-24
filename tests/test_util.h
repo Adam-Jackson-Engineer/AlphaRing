@@ -77,6 +77,16 @@ namespace testutil {
         std::vector<std::string> updated, removed;
         int set_group_calls = 0, apply_teams_calls = 0;
         json live;
+        json config;                  // null = a game that doesn't report its screen
+        std::vector<json> controls;
+        std::string control_error;    // set to refuse changes
+
+        json ScreenConfig() override { return config; }
+        bool ApplyControl(const json& set, std::string& err) override {
+            controls.push_back(set);
+            err = control_error;
+            return control_error.empty();
+        }
 
         explicit FakeGame(std::string instance = "TEST-PC_1") : id(std::move(instance)) {}
         std::string InstanceId() override { return id; }

@@ -30,7 +30,7 @@ namespace testutil {
 
     inline uint16_t RandomPort() {
         static std::mt19937 rng(std::random_device{}());
-        return static_cast<uint16_t>(43000 + rng() % 12000);
+        return static_cast<uint16_t>(43000 + rng() % 6000);   // below 49152: Windows reserves and hands out ports above it
     }
 
     inline double Now() {
